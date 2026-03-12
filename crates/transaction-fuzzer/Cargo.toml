@@ -1,0 +1,29 @@
+[package]
+name = "transaction-fuzzer"
+version = "0.1.0"
+edition = "2024"
+authors = ["Haneul Labs <eng@haneul-labs.com>"]
+description = "Tool to fuzz the system with randomly generated transactions"
+license = "Apache-2.0"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+proptest.workspace = true
+proptest-derive.workspace = true
+rand.workspace = true
+move-core-types.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+
+once_cell.workspace = true
+haneul-core.workspace = true
+haneul-protocol-config.workspace = true
+haneul-types = { workspace = true, features = ["fuzzing"] }
+haneul-move-build.workspace = true
+
+
+[dev-dependencies]
+haneul-protocol-config.workspace = true
