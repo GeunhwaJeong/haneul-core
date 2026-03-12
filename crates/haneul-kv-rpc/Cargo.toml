@@ -1,0 +1,29 @@
+[package]
+name = "haneul-kv-rpc"
+authors = ["Haneul Labs <build@haneul-labs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+bin-version.workspace = true
+clap.workspace = true
+prometheus.workspace = true
+rustls.workspace = true
+haneullabs-metrics.workspace = true
+haneullabs-network.workspace = true
+haneul-data-ingestion-core.workspace = true
+haneul-kvstore.workspace = true
+haneul-rpc-api.workspace = true
+haneul-rpc.workspace = true
+haneul-types.workspace = true
+haneul-sdk-types.workspace = true
+telemetry-subscribers.workspace = true
+tokio.workspace = true
+tonic.workspace = true
+tonic-reflection.workspace = true
+tracing.workspace = true
+haneul-protocol-config.workspace = true
