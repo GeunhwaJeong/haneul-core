@@ -1,0 +1,156 @@
+name: Release Notes Monitor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */3 * * *'  # every 3 hours
+
+# Required for updating repository variables
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  get-list-of-prs:
+    name: Get Release Notes for new PRs
+    outputs:
+      matrix: ${{ steps.get-pr-list.outputs.matrix }}
+      new_commit_hash: ${{ steps.get-pr-list.outputs.new_commit_hash }}
+      sui_version: ${{ steps.get-pr-list.outputs.sui_version }}
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout sui repo main branch
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
+      with:
+        fetch-depth: 0
+        ref: main
+
+    - name: Setup Python
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # pin@v6.2.0
+      with:
+        python-version: 3.10.10
+
+    - name: Get list of PRs
+      id: get-pr-list
+      working-directory: ./
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        export new_commit_hash=$(git rev-parse HEAD)
+
+        # Use repo variable to track last processed commit instead of tags
+        export last_processed_commit="${{ vars.RELEASE_NOTES_LAST_COMMIT }}"
+
+        # If no last processed commit, default to only checking last 50 commits for safety
+        # This prevents processing entire history if variable is missing/deleted
+        if [ -z "$last_processed_commit" ]; then
+          last_processed_commit=$(git rev-parse HEAD~50 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          echo "Warning: RELEASE_NOTES_LAST_COMMIT variable not set, defaulting to last 50 commits"
+          echo "Starting from: $last_processed_commit"
+        fi
+
+        # Use the release_notes.py script to get the list of PRs with release notes
+        export list_of_prs=$(python3 ./scripts/release_notes.py list-prs "${last_processed_commit}" "${new_commit_hash}")
+
+        echo "matrix=${list_of_prs}" >> $GITHUB_OUTPUT
+        echo "new_commit_hash=${new_commit_hash}" >> $GITHUB_OUTPUT
+
+        export sui_crate_version=$(cat Cargo.toml | grep "^version =" | tr -d '"' | awk '{ print $3 }')
+        echo "sui_version=${sui_crate_version}" >> $GITHUB_OUTPUT
+
+  process-prs:
+    name: Processing PR
+    needs: [ get-list-of-prs ]
+    if: ${{ needs.get-list-of-prs.outputs.matrix != '[]' && needs.get-list-of-prs.outputs.matrix != '' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+         pr: ${{ fromJson(needs.get-list-of-prs.outputs.matrix) }}
+
+    steps:
+    - name: Checkout sui repo main branch
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
+      with:
+        ref: main
+
+    - name: Setup Python
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # pin@v6.2.0
+      with:
+        python-version: 3.10.10
+
+    - name: Reading Release notes
+      id: read-notes
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "Processing PR#${{ matrix.pr }}"
+
+        # Use the release_notes.py script to get formatted release notes
+        rel_notes=$(python ./scripts/release_notes.py get-notes "${{ matrix.pr }}")
+
+        # make text json payload friendly
+        rel_notes=$(sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\r//g' <<<"$rel_notes")
+
+        # Use random delimiter to prevent injection attacks
+        delimiter="EOF_$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64 | tr -d '\n=+/')"
+        {
+          echo "release_notes<<${delimiter}"
+          printf '%s\n' "$rel_notes"
+          echo "${delimiter}"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Get PR author and title
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Fetch PR info (author and title) in one API call
+        pr_info=$(gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/MystenLabs/sui/pulls/${{ matrix.pr }})
+        author=$(echo "$pr_info" | jq -r ".user.login")
+        pr_title=$(echo "$pr_info" | jq -r ".title")
+
+        # Escape special characters for Slack mrkdwn format (& < > must be escaped)
+        pr_title=$(echo "$pr_title" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+
+        echo "author=${author}" >> $GITHUB_ENV
+        echo "pr_title=${pr_title}" >> $GITHUB_ENV
+
+    - name: Dispatch to sui-operations for notification
+      uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # pin@v4.0.1
+      with:
+        token: ${{ secrets.DOCKER_BINARY_BUILDS_DISPATCH }}
+        repository: MystenLabs/sui-operations
+        event-type: release-notes-review
+        client-payload: |-
+          {
+            "pr_number": "${{ matrix.pr }}",
+            "pr_title": "${{ env.pr_title }}",
+            "author": "${{ env.author }}",
+            "release_notes": ${{ toJSON(steps.read-notes.outputs.release_notes) }},
+            "sui_version": "${{ needs.get-list-of-prs.outputs.sui_version }}"
+          }
+
+  update-last-processed-commit:
+    name: Update last processed commit
+    needs: [ get-list-of-prs, process-prs ]
+    if: ${{ always() && needs.get-list-of-prs.result == 'success' && (needs.process-prs.result == 'success' || needs.process-prs.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: Update RELEASE_NOTES_LAST_COMMIT variable
+      env:
+        # Requires a PAT with repo scope to update repository variables
+        GH_TOKEN: ${{ secrets.SUI_CREATE_RELEASE }}
+      run: |
+        # Retry up to 3 times to ensure variable is updated
+        for attempt in 1 2 3; do
+          if gh variable set RELEASE_NOTES_LAST_COMMIT \
+              --repo MystenLabs/sui \
+              --body "${{ needs.get-list-of-prs.outputs.new_commit_hash }}"; then
+            echo "Updated RELEASE_NOTES_LAST_COMMIT to ${{ needs.get-list-of-prs.outputs.new_commit_hash }}"
+            exit 0
+          fi
+          echo "Attempt $attempt failed, retrying in 5 seconds..."
+          sleep 5
+        done
+        echo "ERROR: Failed to update RELEASE_NOTES_LAST_COMMIT after 3 attempts"
+        exit 1
