@@ -1,0 +1,40 @@
+[package]
+name = "haneul-faucet"
+version.workspace = true
+edition = "2024"
+authors = ["Haneul Labs <build@haneul-labs.com>"]
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+axum.workspace = true
+axum-extra.workspace = true
+bin-version.workspace = true
+clap.workspace = true
+http.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tonic.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+haneul-sdk.workspace = true
+haneul-rpc-api.workspace = true
+haneul-config.workspace = true
+haneul-keys.workspace = true
+shared-crypto.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+test-cluster.workspace = true
+wiremock.workspace = true
+
+[[bin]]
+name = "haneul-faucet"
+path = "src/main.rs"
