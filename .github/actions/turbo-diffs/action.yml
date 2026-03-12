@@ -1,0 +1,23 @@
+name: Detect Changes in Turbo Workspace
+description: Defines variables indicating the parts of the turbo workspace have changed
+outputs:
+  packages:
+    description: A list of packages that have changed.
+    value: ${{ steps.changes.outputs.packages }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
+      with:
+        fetch-depth: 0
+    - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # pin@v4.2.0
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+      shell: bash
+    - id: changes
+      name: Detect changes
+      shell: bash
+      run: echo "packages=$(pnpm --silent dlx turbo run build --filter="...[origin/main]" --dry=json | jq -c ".packages")" >> $GITHUB_OUTPUT
+    - name: Print changes for easy debugging
+      shell: bash
+      run: echo ${{ steps.changes.outputs.packages }}
