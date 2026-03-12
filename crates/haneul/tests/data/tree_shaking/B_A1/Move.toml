@@ -1,0 +1,8 @@
+[package]
+name = "b"
+edition = "2024"
+implicit-dependencies = false
+
+[dependencies]
+haneul = { local = "../../system-packages/haneul-framework" }
+a = { local = "../A" }

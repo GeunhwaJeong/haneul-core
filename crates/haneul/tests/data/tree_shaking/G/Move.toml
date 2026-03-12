@@ -1,0 +1,11 @@
+[package]
+name = "g"
+edition = "2024"
+implicit-dependencies = false
+
+[dependencies]
+haneul = { local = "../../system-packages/haneul-framework" }
+std = { local = "../../system-packages/move-stdlib" }
+bridge = { local = "../../system-packages/bridge" }
+deepbook = { local = "../../system-packages/deepbook" }
+haneul_system = { local = "../../system-packages/haneul-system" }
