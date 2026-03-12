@@ -1,0 +1,39 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 2 tasks
+
+init:
+A: object(0,0), validator_0: object(0,1), validator_1: object(0,2)
+
+task 1, lines 6-30:
+//# run-graphql
+Response: {
+  "data": {
+    "epoch": {
+      "epochId": 0,
+      "validatorSet": {
+        "activeValidators": {
+          "nodes": [
+            {
+              "contents": {
+                "name": "validator-0"
+              },
+              "reportRecords": {
+                "nodes": []
+              }
+            },
+            {
+              "contents": {
+                "name": "validator-1"
+              },
+              "reportRecords": {
+                "nodes": []
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

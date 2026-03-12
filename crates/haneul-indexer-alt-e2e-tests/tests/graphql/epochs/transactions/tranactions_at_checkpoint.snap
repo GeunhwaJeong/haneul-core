@@ -1,0 +1,202 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 9 tasks
+
+init:
+A: object(0,0)
+
+task 1, line 6:
+//# advance-epoch
+Epoch advanced: 1
+
+task 2, lines 8-10:
+//# programmable --sender A --inputs 42 @A
+//> 0: SplitCoins(Gas, [Input(0)]);
+//> 1: TransferObjects([Result(0)], Input(1))
+created: object(2,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 3, lines 12-14:
+//# programmable --sender A --inputs 43 @A
+//> 0: SplitCoins(Gas, [Input(0)]);
+//> 1: TransferObjects([Result(0)], Input(1))
+created: object(3,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 4, line 16:
+//# create-checkpoint
+Checkpoint created: 2
+
+task 5, lines 18-20:
+//# programmable --sender A --inputs 1
+//> SplitCoins(Gas, [Input(0)]);
+//> MergeCoins(Gas, [Result(0)])
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 6, line 22:
+//# create-checkpoint
+Checkpoint created: 3
+
+task 7, lines 24-26:
+//# programmable --sender A --inputs 2
+//> SplitCoins(Gas, [Input(0)]);
+//> MergeCoins(Gas, [Result(0)])
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 8, lines 28-66:
+//# run-graphql
+Response: {
+  "data": {
+    "epoch0AllTransactions": {
+      "totalTransactions": 2,
+      "transactions": {
+        "edges": [
+          {
+            "cursor": "MA==",
+            "node": {
+              "digest": "9SSXusUFMCT7nVFXQA8kMyG1p38Uze9APuQtFFKWS4AK",
+              "effects": {
+                "checkpoint": {
+                  "sequenceNumber": 0,
+                  "epoch": {
+                    "epochId": 0
+                  }
+                }
+              }
+            }
+          },
+          {
+            "cursor": "MQ==",
+            "node": {
+              "digest": "GtHkWEVdLDkA1QeXAhPuJBYbUEGPLAGKheGcsguXwoMo",
+              "effects": {
+                "checkpoint": {
+                  "sequenceNumber": 1,
+                  "epoch": {
+                    "epochId": 0
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "epoch0AtCheckpoint0": {
+      "totalTransactions": 2,
+      "transactions": {
+        "edges": [
+          {
+            "cursor": "MA==",
+            "node": {
+              "digest": "9SSXusUFMCT7nVFXQA8kMyG1p38Uze9APuQtFFKWS4AK",
+              "effects": {
+                "checkpoint": {
+                  "sequenceNumber": 0,
+                  "epoch": {
+                    "epochId": 0
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "epochWithNonexistentCheckpoint": {
+      "totalTransactions": 2,
+      "transactions": {
+        "edges": []
+      }
+    },
+    "epoch1AtCheckpoint2SentFilter": {
+      "totalTransactions": 5,
+      "transactions": {
+        "edges": [
+          {
+            "cursor": "Mg==",
+            "node": {
+              "digest": "6X6RhKgJ6oqrNtbKCiJY85oMnMHAnwUaPZCZxu5HMXzc",
+              "effects": {
+                "checkpoint": {
+                  "sequenceNumber": 2,
+                  "epoch": {
+                    "epochId": 1
+                  }
+                }
+              }
+            }
+          },
+          {
+            "cursor": "Mw==",
+            "node": {
+              "digest": "FojKmHAbqgHVG2azbfKv6keTY6xb1n2pLYXr5UHeZeZo",
+              "effects": {
+                "checkpoint": {
+                  "sequenceNumber": 2,
+                  "epoch": {
+                    "epochId": 1
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "epoch1AtCheckpoint2All": {
+      "totalTransactions": 5,
+      "transactions": {
+        "edges": [
+          {
+            "cursor": "Mg==",
+            "node": {
+              "digest": "6X6RhKgJ6oqrNtbKCiJY85oMnMHAnwUaPZCZxu5HMXzc",
+              "effects": {
+                "checkpoint": {
+                  "sequenceNumber": 2,
+                  "epoch": {
+                    "epochId": 1
+                  }
+                }
+              }
+            }
+          },
+          {
+            "cursor": "Mw==",
+            "node": {
+              "digest": "FojKmHAbqgHVG2azbfKv6keTY6xb1n2pLYXr5UHeZeZo",
+              "effects": {
+                "checkpoint": {
+                  "sequenceNumber": 2,
+                  "epoch": {
+                    "epochId": 1
+                  }
+                }
+              }
+            }
+          },
+          {
+            "cursor": "NA==",
+            "node": {
+              "digest": "5QdTEu1h7fuRih364SecoELKZ8BQvetNyZHhrGV8YF2i",
+              "effects": {
+                "checkpoint": {
+                  "sequenceNumber": 2,
+                  "epoch": {
+                    "epochId": 1
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
