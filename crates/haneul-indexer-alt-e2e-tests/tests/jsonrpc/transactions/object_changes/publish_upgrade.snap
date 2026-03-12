@@ -1,0 +1,117 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 6 tasks
+
+init:
+A: object(0,0)
+
+task 1, lines 9-12:
+//# publish --upgradeable --sender A
+created: object(1,0), object(1,1)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 5076800,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 2, lines 14-21:
+//# upgrade --package P0 --upgrade-capability 1,1 --sender A
+created: object(2,0)
+mutated: object(0,0), object(1,1)
+gas summary: computation_cost: 1000000, storage_cost: 5768400,  storage_rebate: 2595780, non_refundable_storage_fee: 26220
+
+task 3, line 23:
+//# create-checkpoint
+Checkpoint created: 1
+
+task 4, lines 25-29:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 0,
+  "result": {
+    "digest": "7dvosaBxU9Hv7ETsQFhXtFPdd9QGp9FzxtwtjpkmJzNR",
+    "objectChanges": [
+      {
+        "type": "published",
+        "packageId": "0xaafa56d38c721c4b6be7cfdde1a033fe49fd5442930e2b48080cfe6f1cbd3f19",
+        "version": "1",
+        "digest": "7dMJn1RSSpcKaU7EAjuFY7YHxu1jDWrWGcxecEETpr3w",
+        "modules": [
+          "M"
+        ]
+      },
+      {
+        "type": "mutated",
+        "sender": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
+        "owner": {
+          "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
+        },
+        "objectType": "0x2::coin::Coin<0x2::haneul::HANEUL>",
+        "objectId": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+        "version": "2",
+        "previousVersion": "1",
+        "digest": "DN89hvPZ2H371kYotFEvTmvjZS9cDV1efqWEdraV91Qk"
+      },
+      {
+        "type": "created",
+        "sender": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
+        "owner": {
+          "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
+        },
+        "objectType": "0x2::package::UpgradeCap",
+        "objectId": "0xbecdc888acc575909f3c2d6e5418b426987a4fb7271f8e131ac6012a05d096e0",
+        "version": "2",
+        "digest": "8bo34ryLkAiXx6u7xBAVNBMtEgKzv5GBQfRpWC2epnCA"
+      }
+    ],
+    "timestampMs": "0",
+    "checkpoint": "1"
+  }
+}
+
+task 5, lines 31-35:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "digest": "3pCqc6JeztmRibmKqyhMvzuepqL6kvQPgMGQ3depgNt5",
+    "objectChanges": [
+      {
+        "type": "published",
+        "packageId": "0x465d9044132c6628a62fbd3a3e8cd72fc2725972b725145e69de4ce8947168ad",
+        "version": "2",
+        "digest": "F8GnWVUFrx1NvFMsA99FLoEthfj1iN84X4CGcSvYco94",
+        "modules": [
+          "M",
+          "N"
+        ]
+      },
+      {
+        "type": "mutated",
+        "sender": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
+        "owner": {
+          "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
+        },
+        "objectType": "0x2::coin::Coin<0x2::haneul::HANEUL>",
+        "objectId": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+        "version": "3",
+        "previousVersion": "2",
+        "digest": "EeasXVwQ8cYtLZHbkTEQ8Wg5q4MmvSMYphFnQ6mM397v"
+      },
+      {
+        "type": "mutated",
+        "sender": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
+        "owner": {
+          "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
+        },
+        "objectType": "0x2::package::UpgradeCap",
+        "objectId": "0xbecdc888acc575909f3c2d6e5418b426987a4fb7271f8e131ac6012a05d096e0",
+        "version": "3",
+        "previousVersion": "2",
+        "digest": "GDiTnMJMGkphqJSV5HLqq5aXTdwPpDP2cK2VEXTiKhpE"
+      }
+    ],
+    "timestampMs": "0",
+    "checkpoint": "1"
+  }
+}

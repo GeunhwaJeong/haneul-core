@@ -1,0 +1,1007 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 17 tasks
+
+init:
+A: object(0,0), B: object(0,1)
+
+task 1, lines 14-48:
+//# publish
+created: object(1,0), object(1,1)
+mutated: object(0,2)
+gas summary: computation_cost: 1000000, storage_cost: 9211200,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 2, lines 50-56:
+//# programmable --sender A --inputs object(1,0) 42 @A
+//> 0: test::counter::inc(Input(0));
+//> 1: test::counter::inc_by(Input(0), Input(1));
+//> 2: haneul::coin::value<haneul::haneul::HANEUL>(Gas);
+//> 3: test::counter::inc_by(Input(0), Result(2));
+//> 4: test::counter::take(Input(0), Input(1));
+//> 5: TransferObjects([Result(4)], Input(2))
+events: Event { package_id: test, transaction_module: Identifier("counter"), sender: A, type_: StructTag { address: test, module: Identifier("counter"), name: Identifier("NFTMinted"), type_params: [] }, contents: [213, 156, 224, 74, 175, 56, 219, 28, 52, 32, 202, 187, 212, 154, 199, 132, 27, 119, 222, 164, 77, 121, 186, 118, 222, 3, 13, 165, 26, 76, 26, 114] }
+created: object(2,0)
+mutated: object(0,0), object(1,0)
+gas summary: computation_cost: 1000000, storage_cost: 3678400,  storage_rebate: 1346796, non_refundable_storage_fee: 13604
+
+task 3, lines 58-60:
+//# programmable --sender A --inputs 42 @B
+//> 0: SplitCoins(Gas, [Input(0)]);
+//> 1: TransferObjects([Result(0)], Input(1))
+created: object(3,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 4, line 62:
+//# create-checkpoint
+Checkpoint created: 1
+
+task 5, lines 64-68:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 0,
+  "result": {
+    "digest": "64zRei4byM516fgTL8eimyf7EYsLdUqtv8tm3NuS1SJD",
+    "timestampMs": "0",
+    "checkpoint": "1"
+  }
+}
+
+task 6, lines 70-74:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32602,
+    "message": "Invalid Params: Transaction 11111111111111111111111111111111 not found"
+  }
+}
+
+task 7, lines 76-86:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "digest": "64zRei4byM516fgTL8eimyf7EYsLdUqtv8tm3NuS1SJD",
+    "rawTransaction": "AAADAQFn6/7SvKLP73iYdVq3YEi6YuHNhLNiOkGfc+a1JpkeXwIAAAAAAAAAAQAIKgAAAAAAAAAAIPzMmkIbuxPBpmoaqY8K11Ap7elIV3ecaRW0T5QGi5IeBgAj80tPABEwMZ9a0k6qEjinUeNByQXu/zcuROXHpUz3Gwdjb3VudGVyA2luYwABAQAAACPzS08AETAxn1rSTqoSOKdR40HJBe7/Ny5E5celTPcbB2NvdW50ZXIGaW5jX2J5AAIBAAABAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIEY29pbgV2YWx1ZQEHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIDc3VpA1NVSQABAAAj80tPABEwMZ9a0k6qEjinUeNByQXu/zcuROXHpUz3Gwdjb3VudGVyBmluY19ieQACAQAAAgIAACPzS08AETAxn1rSTqoSOKdR40HJBe7/Ny5E5celTPcbB2NvdW50ZXIEdGFrZQACAQAAAQEAAQECBAABAgD8zJpCG7sTwaZqGqmPCtdQKe3pSFd3nGkVtE+UBouSHgHhFa5/+bVpRPr+9v0BXVEKL9ljttQuyKYmZAnA6kD7NgEAAAAAAAAAILEdqdJRNjQx0uGJTqU9l7ljnWzAF5jpwQ1MKV73Q6pc/MyaQhu7E8GmahqpjwrXUCnt6UhXd5xpFbRPlAaLkh7oAwAAAAAAAADyBSoBAAAAAA==",
+    "timestampMs": "0",
+    "checkpoint": "1",
+    "rawEffects": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      64,
+      66,
+      15,
+      0,
+      0,
+      0,
+      0,
+      0,
+      192,
+      32,
+      56,
+      0,
+      0,
+      0,
+      0,
+      0,
+      236,
+      140,
+      20,
+      0,
+      0,
+      0,
+      0,
+      0,
+      36,
+      53,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      32,
+      75,
+      80,
+      27,
+      147,
+      73,
+      104,
+      28,
+      229,
+      140,
+      189,
+      200,
+      98,
+      115,
+      7,
+      226,
+      8,
+      173,
+      78,
+      92,
+      96,
+      71,
+      99,
+      227,
+      123,
+      17,
+      90,
+      136,
+      46,
+      93,
+      140,
+      61,
+      186,
+      1,
+      2,
+      0,
+      0,
+      0,
+      1,
+      32,
+      86,
+      143,
+      36,
+      4,
+      45,
+      138,
+      253,
+      121,
+      61,
+      151,
+      241,
+      38,
+      74,
+      242,
+      254,
+      225,
+      54,
+      6,
+      62,
+      234,
+      117,
+      58,
+      202,
+      152,
+      218,
+      212,
+      149,
+      68,
+      141,
+      145,
+      136,
+      195,
+      2,
+      32,
+      6,
+      74,
+      182,
+      203,
+      131,
+      63,
+      82,
+      92,
+      168,
+      98,
+      111,
+      137,
+      246,
+      85,
+      128,
+      73,
+      49,
+      99,
+      20,
+      75,
+      70,
+      107,
+      149,
+      7,
+      28,
+      66,
+      72,
+      148,
+      220,
+      134,
+      236,
+      33,
+      32,
+      139,
+      77,
+      26,
+      13,
+      228,
+      231,
+      54,
+      251,
+      26,
+      72,
+      165,
+      56,
+      160,
+      222,
+      250,
+      15,
+      231,
+      129,
+      12,
+      107,
+      11,
+      88,
+      16,
+      119,
+      21,
+      123,
+      255,
+      179,
+      247,
+      81,
+      114,
+      137,
+      3,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      3,
+      103,
+      235,
+      254,
+      210,
+      188,
+      162,
+      207,
+      239,
+      120,
+      152,
+      117,
+      90,
+      183,
+      96,
+      72,
+      186,
+      98,
+      225,
+      205,
+      132,
+      179,
+      98,
+      58,
+      65,
+      159,
+      115,
+      230,
+      181,
+      38,
+      153,
+      30,
+      95,
+      1,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      32,
+      18,
+      255,
+      15,
+      79,
+      150,
+      98,
+      16,
+      225,
+      133,
+      211,
+      52,
+      235,
+      209,
+      55,
+      244,
+      156,
+      62,
+      172,
+      20,
+      175,
+      159,
+      32,
+      174,
+      213,
+      145,
+      229,
+      82,
+      210,
+      164,
+      85,
+      112,
+      54,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      32,
+      28,
+      132,
+      242,
+      91,
+      124,
+      207,
+      214,
+      26,
+      157,
+      157,
+      10,
+      151,
+      47,
+      80,
+      222,
+      89,
+      137,
+      222,
+      113,
+      25,
+      0,
+      186,
+      53,
+      175,
+      187,
+      53,
+      109,
+      113,
+      87,
+      255,
+      65,
+      207,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      213,
+      156,
+      224,
+      74,
+      175,
+      56,
+      219,
+      28,
+      52,
+      32,
+      202,
+      187,
+      212,
+      154,
+      199,
+      132,
+      27,
+      119,
+      222,
+      164,
+      77,
+      121,
+      186,
+      118,
+      222,
+      3,
+      13,
+      165,
+      26,
+      76,
+      26,
+      114,
+      0,
+      1,
+      32,
+      55,
+      186,
+      63,
+      107,
+      166,
+      105,
+      232,
+      60,
+      134,
+      250,
+      32,
+      219,
+      196,
+      167,
+      132,
+      4,
+      36,
+      109,
+      119,
+      93,
+      197,
+      213,
+      161,
+      149,
+      151,
+      149,
+      76,
+      103,
+      212,
+      74,
+      94,
+      168,
+      0,
+      252,
+      204,
+      154,
+      66,
+      27,
+      187,
+      19,
+      193,
+      166,
+      106,
+      26,
+      169,
+      143,
+      10,
+      215,
+      80,
+      41,
+      237,
+      233,
+      72,
+      87,
+      119,
+      156,
+      105,
+      21,
+      180,
+      79,
+      148,
+      6,
+      139,
+      146,
+      30,
+      1,
+      225,
+      21,
+      174,
+      127,
+      249,
+      181,
+      105,
+      68,
+      250,
+      254,
+      246,
+      253,
+      1,
+      93,
+      81,
+      10,
+      47,
+      217,
+      99,
+      182,
+      212,
+      46,
+      200,
+      166,
+      38,
+      100,
+      9,
+      192,
+      234,
+      64,
+      251,
+      54,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      32,
+      177,
+      29,
+      169,
+      210,
+      81,
+      54,
+      52,
+      49,
+      210,
+      225,
+      137,
+      78,
+      165,
+      61,
+      151,
+      185,
+      99,
+      157,
+      108,
+      192,
+      23,
+      152,
+      233,
+      193,
+      13,
+      76,
+      41,
+      94,
+      247,
+      67,
+      170,
+      92,
+      0,
+      252,
+      204,
+      154,
+      66,
+      27,
+      187,
+      19,
+      193,
+      166,
+      106,
+      26,
+      169,
+      143,
+      10,
+      215,
+      80,
+      41,
+      237,
+      233,
+      72,
+      87,
+      119,
+      156,
+      105,
+      21,
+      180,
+      79,
+      148,
+      6,
+      139,
+      146,
+      30,
+      1,
+      32,
+      114,
+      154,
+      16,
+      35,
+      53,
+      169,
+      252,
+      68,
+      45,
+      195,
+      33,
+      238,
+      93,
+      160,
+      15,
+      248,
+      51,
+      51,
+      252,
+      115,
+      128,
+      123,
+      141,
+      3,
+      93,
+      37,
+      120,
+      87,
+      190,
+      77,
+      199,
+      149,
+      0,
+      252,
+      204,
+      154,
+      66,
+      27,
+      187,
+      19,
+      193,
+      166,
+      106,
+      26,
+      169,
+      143,
+      10,
+      215,
+      80,
+      41,
+      237,
+      233,
+      72,
+      87,
+      119,
+      156,
+      105,
+      21,
+      180,
+      79,
+      148,
+      6,
+      139,
+      146,
+      30,
+      0,
+      0,
+      0
+    ]
+  }
+}
+
+task 8, lines 88-98:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "digest": "64zRei4byM516fgTL8eimyf7EYsLdUqtv8tm3NuS1SJD",
+    "transaction": {
+      "data": {
+        "messageVersion": "v1",
+        "transaction": {
+          "kind": "ProgrammableTransaction",
+          "inputs": [
+            {
+              "type": "object",
+              "objectType": "sharedObject",
+              "objectId": "0x67ebfed2bca2cfef7898755ab76048ba62e1cd84b3623a419f73e6b526991e5f",
+              "initialSharedVersion": "2",
+              "mutable": true
+            },
+            {
+              "type": "pure",
+              "valueType": "u64",
+              "value": "42"
+            },
+            {
+              "type": "pure",
+              "valueType": "address",
+              "value": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
+            }
+          ],
+          "transactions": [
+            {
+              "MoveCall": {
+                "package": "0x23f34b4f001130319f5ad24eaa1238a751e341c905eeff372e44e5c7a54cf71b",
+                "module": "counter",
+                "function": "inc",
+                "arguments": [
+                  {
+                    "Input": 0
+                  }
+                ]
+              }
+            },
+            {
+              "MoveCall": {
+                "package": "0x23f34b4f001130319f5ad24eaa1238a751e341c905eeff372e44e5c7a54cf71b",
+                "module": "counter",
+                "function": "inc_by",
+                "arguments": [
+                  {
+                    "Input": 0
+                  },
+                  {
+                    "Input": 1
+                  }
+                ]
+              }
+            },
+            {
+              "MoveCall": {
+                "package": "0x0000000000000000000000000000000000000000000000000000000000000002",
+                "module": "coin",
+                "function": "value",
+                "type_arguments": [
+                  "0x2::haneul::HANEUL"
+                ],
+                "arguments": [
+                  "GasCoin"
+                ]
+              }
+            },
+            {
+              "MoveCall": {
+                "package": "0x23f34b4f001130319f5ad24eaa1238a751e341c905eeff372e44e5c7a54cf71b",
+                "module": "counter",
+                "function": "inc_by",
+                "arguments": [
+                  {
+                    "Input": 0
+                  },
+                  {
+                    "Result": 2
+                  }
+                ]
+              }
+            },
+            {
+              "MoveCall": {
+                "package": "0x23f34b4f001130319f5ad24eaa1238a751e341c905eeff372e44e5c7a54cf71b",
+                "module": "counter",
+                "function": "take",
+                "arguments": [
+                  {
+                    "Input": 0
+                  },
+                  {
+                    "Input": 1
+                  }
+                ]
+              }
+            },
+            {
+              "TransferObjects": [
+                [
+                  {
+                    "Result": 4
+                  }
+                ],
+                {
+                  "Input": 2
+                }
+              ]
+            }
+          ]
+        },
+        "sender": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
+        "gasData": {
+          "payment": [
+            {
+              "objectId": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+              "version": 1,
+              "digest": "CvPQ2HgmZYFvRDiN9nkUJa1ZhbN9ote38764XzqHZGzP"
+            }
+          ],
+          "owner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
+          "price": "1000",
+          "budget": "5000000000"
+        }
+      },
+      "txSignatures": [
+        "AL6+6NhXPYDsx3vatu7xHV+Sp9On9cbR0W6rCzWXcNaZfKTbOTn/dEzsL7ceXho/jw+gKAN1ZxaMsRrPOFOzxgB/UUY663bYjcm3XmNyULIgxJz1t5Z9vxfB+fp8WUoJKA=="
+      ]
+    },
+    "effects": {
+      "messageVersion": "v1",
+      "status": {
+        "status": "success"
+      },
+      "executedEpoch": "0",
+      "gasUsed": {
+        "computationCost": "1000000",
+        "storageCost": "3678400",
+        "storageRebate": "1346796",
+        "nonRefundableStorageFee": "13604"
+      },
+      "modifiedAtVersions": [
+        {
+          "objectId": "0x67ebfed2bca2cfef7898755ab76048ba62e1cd84b3623a419f73e6b526991e5f",
+          "sequenceNumber": "2"
+        },
+        {
+          "objectId": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+          "sequenceNumber": "1"
+        }
+      ],
+      "sharedObjects": [
+        {
+          "objectId": "0x67ebfed2bca2cfef7898755ab76048ba62e1cd84b3623a419f73e6b526991e5f",
+          "version": 2,
+          "digest": "2H9v4D88goXaEbUu9AgHn8XEpYPcYhjbk7pV5jSYTVKK"
+        }
+      ],
+      "transactionDigest": "64zRei4byM516fgTL8eimyf7EYsLdUqtv8tm3NuS1SJD",
+      "created": [
+        {
+          "owner": {
+            "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
+          },
+          "reference": {
+            "objectId": "0xd59ce04aaf38db1c3420cabbd49ac7841b77dea44d79ba76de030da51a4c1a72",
+            "version": 3,
+            "digest": "4kY9E5btTqFb4bxbsqUgFzvrsTK7EzPFhr2vwe7244fR"
+          }
+        }
+      ],
+      "mutated": [
+        {
+          "owner": {
+            "Shared": {
+              "initial_shared_version": 2
+            }
+          },
+          "reference": {
+            "objectId": "0x67ebfed2bca2cfef7898755ab76048ba62e1cd84b3623a419f73e6b526991e5f",
+            "version": 3,
+            "digest": "2vKzfm1b2vXcPvC1apdCQsfTMLL4euhFbVXGws7SzCsx"
+          }
+        },
+        {
+          "owner": {
+            "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
+          },
+          "reference": {
+            "objectId": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+            "version": 3,
+            "digest": "8iMjSMkoS1rNmSpFg3tAM91jvZspYZekP6YYb1N4EwCg"
+          }
+        }
+      ],
+      "gasObject": {
+        "owner": {
+          "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
+        },
+        "reference": {
+          "objectId": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+          "version": 3,
+          "digest": "8iMjSMkoS1rNmSpFg3tAM91jvZspYZekP6YYb1N4EwCg"
+        }
+      },
+      "eventsDigest": "6ptf4zNJtoLD52UgDWPyBfBDCxCLP18tpAhfrTmXNTZt",
+      "dependencies": [
+        "RZXNcHtXeHL77wp6MQtTQ5BAQuyWMgWyofAXQNjr43S",
+        "ANmrqK6Qg9cMHFakzsPZbW5xW4mTpLjdbcpisVh9NfiY"
+      ]
+    },
+    "timestampMs": "0",
+    "checkpoint": "1"
+  }
+}
+
+task 9, lines 100-109:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 4,
+  "result": {
+    "digest": "64zRei4byM516fgTL8eimyf7EYsLdUqtv8tm3NuS1SJD",
+    "events": [
+      {
+        "id": {
+          "txDigest": "64zRei4byM516fgTL8eimyf7EYsLdUqtv8tm3NuS1SJD",
+          "eventSeq": "0"
+        },
+        "packageId": "0x23f34b4f001130319f5ad24eaa1238a751e341c905eeff372e44e5c7a54cf71b",
+        "transactionModule": "counter",
+        "sender": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
+        "type": "0x23f34b4f001130319f5ad24eaa1238a751e341c905eeff372e44e5c7a54cf71b::counter::NFTMinted",
+        "parsedJson": {
+          "id": "0xd59ce04aaf38db1c3420cabbd49ac7841b77dea44d79ba76de030da51a4c1a72"
+        },
+        "bcsEncoding": "base64",
+        "bcs": "1ZzgSq842xw0IMq71JrHhBt33qRNebp23gMNpRpMGnI=",
+        "timestampMs": "0"
+      }
+    ],
+    "timestampMs": "0",
+    "checkpoint": "1"
+  }
+}
+
+task 10, lines 111-120:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 5,
+  "result": {
+    "digest": "64zRei4byM516fgTL8eimyf7EYsLdUqtv8tm3NuS1SJD",
+    "balanceChanges": [
+      {
+        "owner": {
+          "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
+        },
+        "coinType": "0x2::haneul::HANEUL",
+        "amount": "-3331604"
+      }
+    ],
+    "timestampMs": "0",
+    "checkpoint": "1"
+  }
+}
+
+task 11, lines 122-131:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 6,
+  "result": {
+    "digest": "EqxhmVdamGoCEjM2LxkXHDctQBX2sUZHFT9xuzH2xKqS",
+    "balanceChanges": [
+      {
+        "owner": {
+          "AddressOwner": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a"
+        },
+        "coinType": "0x2::haneul::HANEUL",
+        "amount": "42"
+      },
+      {
+        "owner": {
+          "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
+        },
+        "coinType": "0x2::haneul::HANEUL",
+        "amount": "-1997922"
+      }
+    ],
+    "timestampMs": "0",
+    "checkpoint": "1"
+  }
+}
+
+task 12, lines 133-139:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 7,
+  "result": {
+    "digest": "EqxhmVdamGoCEjM2LxkXHDctQBX2sUZHFT9xuzH2xKqS",
+    "timestampMs": "0",
+    "checkpoint": "1"
+  }
+}
+
+task 13, lines 141-143:
+//# programmable --sender A --inputs 42 @B
+//> 0: SplitCoins(Gas, [Input(0)]);
+//> 1: TransferObjects([Result(0)], Input(1))
+created: object(13,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 15, line 147:
+//# create-checkpoint
+Checkpoint created: 2
+
+task 16, lines 149-155:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 8,
+  "result": {
+    "digest": "3ESCy6p5sLiF5CPrMj2bRqc442ikH6TMTsnpsxxSxWX4",
+    "timestampMs": "1",
+    "checkpoint": "2"
+  }
+}

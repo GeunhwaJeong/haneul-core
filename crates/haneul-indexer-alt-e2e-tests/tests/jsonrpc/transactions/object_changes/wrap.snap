@@ -1,0 +1,78 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 6 tasks
+
+init:
+A: object(0,0)
+
+task 1, lines 8-26:
+//# publish
+created: object(1,0)
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 5836800,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 2, lines 28-30:
+//# programmable --sender A --inputs @A
+//> 0: P0::M::new();
+//> 1: TransferObjects([Result(0)], Input(0))
+created: object(2,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 2196400,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 3, lines 32-34:
+//# programmable --sender A --inputs object(2,0) @A
+//> 0: P0::M::wrap(Input(0));
+//> 1: TransferObjects([Result(0)], Input(1))
+created: object(3,0)
+mutated: object(0,0)
+wrapped: object(2,0)
+gas summary: computation_cost: 1000000, storage_cost: 2447200,  storage_rebate: 2174436, non_refundable_storage_fee: 21964
+
+task 4, line 36:
+//# create-checkpoint
+Checkpoint created: 1
+
+task 5, lines 38-42:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 0,
+  "result": {
+    "digest": "8AeNyDVU6q7CMVai21qWJhoYSVkiCU8U43r6G921XkoS",
+    "objectChanges": [
+      {
+        "type": "created",
+        "sender": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
+        "owner": {
+          "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
+        },
+        "objectType": "0xa3fa45c7a4494ab87d14750900b99a5088f1a0bc5c306498c2f554cba0c4ed38::M::O",
+        "objectId": "0x4941c34b32e6cf05aa6783cfb332147dac96876564ffb40419a70804478798ed",
+        "version": "3",
+        "digest": "6TFBwNNNxivjigLcDksFjAzAnC4cb8Xb5DPJ9rzViQvf"
+      },
+      {
+        "type": "wrapped",
+        "sender": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
+        "objectType": "0xa3fa45c7a4494ab87d14750900b99a5088f1a0bc5c306498c2f554cba0c4ed38::M::I",
+        "objectId": "0x651b8c9b37a4ecf56fcca3fcb20bcd80bdb455567bcae49b348591a8e34013a6",
+        "version": "3"
+      },
+      {
+        "type": "mutated",
+        "sender": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e",
+        "owner": {
+          "AddressOwner": "0xfccc9a421bbb13c1a66a1aa98f0ad75029ede94857779c6915b44f94068b921e"
+        },
+        "objectType": "0x2::coin::Coin<0x2::haneul::HANEUL>",
+        "objectId": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+        "version": "3",
+        "previousVersion": "2",
+        "digest": "12KxMfXTq2XWoYGhmYjRX2kK2uPTe3W4hwLyVzz8fQ6z"
+      }
+    ],
+    "timestampMs": "0",
+    "checkpoint": "1"
+  }
+}

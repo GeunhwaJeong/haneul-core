@@ -1,0 +1,583 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 21 tasks
+
+init:
+A: object(0,0)
+
+task 1, lines 12-25:
+//# publish
+created: object(1,0)
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 6771600,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 2, lines 27-32:
+//# publish
+created: object(2,0)
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 4453600,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 3, lines 34-35:
+//# programmable
+//> P0::M::foo();
+events: Event { package_id: P0, transaction_module: Identifier("M"), sender: _, type_: StructTag { address: P0, module: Identifier("M"), name: Identifier("P0MFoo"), type_params: [] }, contents: [0] }
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 4, lines 37-38:
+//# programmable
+//> P0::N::bar();
+events: Event { package_id: P0, transaction_module: Identifier("N"), sender: _, type_: StructTag { address: P0, module: Identifier("N"), name: Identifier("P0NBar"), type_params: [] }, contents: [0] }
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 5, lines 40-41:
+//# programmable
+//> P0::N::baz();
+events: Event { package_id: P0, transaction_module: Identifier("N"), sender: _, type_: StructTag { address: P0, module: Identifier("N"), name: Identifier("P0NBaz"), type_params: [] }, contents: [0] }
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 6, lines 43-44:
+//# programmable
+//> P1::M::qux();
+events: Event { package_id: P1, transaction_module: Identifier("M"), sender: _, type_: StructTag { address: P1, module: Identifier("M"), name: Identifier("P1MQux"), type_params: [] }, contents: [0] }
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 7, lines 46-47:
+//# programmable
+//> P0::M::foo();
+events: Event { package_id: P0, transaction_module: Identifier("M"), sender: _, type_: StructTag { address: P0, module: Identifier("M"), name: Identifier("P0MFoo"), type_params: [] }, contents: [0] }
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 8, lines 49-50:
+//# programmable
+//> P0::N::bar();
+events: Event { package_id: P0, transaction_module: Identifier("N"), sender: _, type_: StructTag { address: P0, module: Identifier("N"), name: Identifier("P0NBar"), type_params: [] }, contents: [0] }
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 9, lines 52-53:
+//# programmable
+//> P0::N::baz();
+events: Event { package_id: P0, transaction_module: Identifier("N"), sender: _, type_: StructTag { address: P0, module: Identifier("N"), name: Identifier("P0NBaz"), type_params: [] }, contents: [0] }
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 10, lines 55-56:
+//# programmable
+//> P1::M::qux();
+events: Event { package_id: P1, transaction_module: Identifier("M"), sender: _, type_: StructTag { address: P1, module: Identifier("M"), name: Identifier("P1MQux"), type_params: [] }, contents: [0] }
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 11, lines 58-59:
+//# programmable
+//> P0::M::foo();
+events: Event { package_id: P0, transaction_module: Identifier("M"), sender: _, type_: StructTag { address: P0, module: Identifier("M"), name: Identifier("P0MFoo"), type_params: [] }, contents: [0] }
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 12, lines 61-62:
+//# programmable
+//> P0::N::bar();
+events: Event { package_id: P0, transaction_module: Identifier("N"), sender: _, type_: StructTag { address: P0, module: Identifier("N"), name: Identifier("P0NBar"), type_params: [] }, contents: [0] }
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 13, lines 64-65:
+//# programmable
+//> P0::N::baz();
+events: Event { package_id: P0, transaction_module: Identifier("N"), sender: _, type_: StructTag { address: P0, module: Identifier("N"), name: Identifier("P0NBaz"), type_params: [] }, contents: [0] }
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 14, lines 67-68:
+//# programmable
+//> P1::M::qux();
+events: Event { package_id: P1, transaction_module: Identifier("M"), sender: _, type_: StructTag { address: P1, module: Identifier("M"), name: Identifier("P1MQux"), type_params: [] }, contents: [0] }
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 15, line 70:
+//# create-checkpoint
+Checkpoint created: 1
+
+task 16, lines 72-87:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 0,
+  "result": {
+    "data": [
+      {
+        "digest": "GBEckQExsxRZ2yaUhB6ioheNvNgv5jcvZHMb2oAbHByS",
+        "events": [
+          {
+            "id": {
+              "txDigest": "GBEckQExsxRZ2yaUhB6ioheNvNgv5jcvZHMb2oAbHByS",
+              "eventSeq": "0"
+            },
+            "packageId": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792",
+            "transactionModule": "M",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792::M::P0MFoo",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "8LCkq58GCzsNJmfPVHdbvK7mdEFyg5TRRCpcgNHUG2RM",
+        "events": [
+          {
+            "id": {
+              "txDigest": "8LCkq58GCzsNJmfPVHdbvK7mdEFyg5TRRCpcgNHUG2RM",
+              "eventSeq": "0"
+            },
+            "packageId": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792",
+            "transactionModule": "N",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792::N::P0NBar",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "9LvKdQLZxC1t2ggWdmpH2Nu6DCHaR9Gaq7RPPSWd8SkA",
+        "events": [
+          {
+            "id": {
+              "txDigest": "9LvKdQLZxC1t2ggWdmpH2Nu6DCHaR9Gaq7RPPSWd8SkA",
+              "eventSeq": "0"
+            },
+            "packageId": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792",
+            "transactionModule": "N",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792::N::P0NBaz",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "ChFoBNVzARw3syAGrB5zZBRjtoBEPNismZdJG1yGaLWz",
+        "events": [
+          {
+            "id": {
+              "txDigest": "ChFoBNVzARw3syAGrB5zZBRjtoBEPNismZdJG1yGaLWz",
+              "eventSeq": "0"
+            },
+            "packageId": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792",
+            "transactionModule": "M",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792::M::P0MFoo",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "9NikCaK4FYtEXEFdZ3veZZ9Pdxd3bgss3jT2NZbKtqiG",
+        "events": [
+          {
+            "id": {
+              "txDigest": "9NikCaK4FYtEXEFdZ3veZZ9Pdxd3bgss3jT2NZbKtqiG",
+              "eventSeq": "0"
+            },
+            "packageId": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792",
+            "transactionModule": "N",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792::N::P0NBar",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "4Ahxpdqgh1H7d8Zoa7GhSDr2JcQhsDQozHYu9PT8SNEi",
+        "events": [
+          {
+            "id": {
+              "txDigest": "4Ahxpdqgh1H7d8Zoa7GhSDr2JcQhsDQozHYu9PT8SNEi",
+              "eventSeq": "0"
+            },
+            "packageId": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792",
+            "transactionModule": "N",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792::N::P0NBaz",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "6KNtj7YAhcwQD38p8qBTVXmAAwNioMLiyEEyywD1UtPt",
+        "events": [
+          {
+            "id": {
+              "txDigest": "6KNtj7YAhcwQD38p8qBTVXmAAwNioMLiyEEyywD1UtPt",
+              "eventSeq": "0"
+            },
+            "packageId": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792",
+            "transactionModule": "M",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792::M::P0MFoo",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "DkxV6yUMbQiXNLm66gKwoCpirKaQUY9CZtRyR45nhr5y",
+        "events": [
+          {
+            "id": {
+              "txDigest": "DkxV6yUMbQiXNLm66gKwoCpirKaQUY9CZtRyR45nhr5y",
+              "eventSeq": "0"
+            },
+            "packageId": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792",
+            "transactionModule": "N",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792::N::P0NBar",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "6yVHVZg9ND9zd38No39zcQS5PfoeQJGyoRsLk1jffge6",
+        "events": [
+          {
+            "id": {
+              "txDigest": "6yVHVZg9ND9zd38No39zcQS5PfoeQJGyoRsLk1jffge6",
+              "eventSeq": "0"
+            },
+            "packageId": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792",
+            "transactionModule": "N",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792::N::P0NBaz",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      }
+    ],
+    "nextCursor": "MTM=",
+    "hasNextPage": false
+  }
+}
+
+task 17, lines 89-105:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "data": [
+      {
+        "digest": "8LCkq58GCzsNJmfPVHdbvK7mdEFyg5TRRCpcgNHUG2RM",
+        "events": [
+          {
+            "id": {
+              "txDigest": "8LCkq58GCzsNJmfPVHdbvK7mdEFyg5TRRCpcgNHUG2RM",
+              "eventSeq": "0"
+            },
+            "packageId": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792",
+            "transactionModule": "N",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792::N::P0NBar",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "9LvKdQLZxC1t2ggWdmpH2Nu6DCHaR9Gaq7RPPSWd8SkA",
+        "events": [
+          {
+            "id": {
+              "txDigest": "9LvKdQLZxC1t2ggWdmpH2Nu6DCHaR9Gaq7RPPSWd8SkA",
+              "eventSeq": "0"
+            },
+            "packageId": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792",
+            "transactionModule": "N",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792::N::P0NBaz",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "9NikCaK4FYtEXEFdZ3veZZ9Pdxd3bgss3jT2NZbKtqiG",
+        "events": [
+          {
+            "id": {
+              "txDigest": "9NikCaK4FYtEXEFdZ3veZZ9Pdxd3bgss3jT2NZbKtqiG",
+              "eventSeq": "0"
+            },
+            "packageId": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792",
+            "transactionModule": "N",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792::N::P0NBar",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "4Ahxpdqgh1H7d8Zoa7GhSDr2JcQhsDQozHYu9PT8SNEi",
+        "events": [
+          {
+            "id": {
+              "txDigest": "4Ahxpdqgh1H7d8Zoa7GhSDr2JcQhsDQozHYu9PT8SNEi",
+              "eventSeq": "0"
+            },
+            "packageId": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792",
+            "transactionModule": "N",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792::N::P0NBaz",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "DkxV6yUMbQiXNLm66gKwoCpirKaQUY9CZtRyR45nhr5y",
+        "events": [
+          {
+            "id": {
+              "txDigest": "DkxV6yUMbQiXNLm66gKwoCpirKaQUY9CZtRyR45nhr5y",
+              "eventSeq": "0"
+            },
+            "packageId": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792",
+            "transactionModule": "N",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792::N::P0NBar",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "6yVHVZg9ND9zd38No39zcQS5PfoeQJGyoRsLk1jffge6",
+        "events": [
+          {
+            "id": {
+              "txDigest": "6yVHVZg9ND9zd38No39zcQS5PfoeQJGyoRsLk1jffge6",
+              "eventSeq": "0"
+            },
+            "packageId": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792",
+            "transactionModule": "N",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0x70101c5b2bdfb105a4c734ea5aa917e0fc6e4900e4b32027cfa182a71cb33792::N::P0NBaz",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      }
+    ],
+    "nextCursor": "MTM=",
+    "hasNextPage": false
+  }
+}
+
+task 18, lines 107-124:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "data": [
+      {
+        "digest": "HZBiJrtAEwYQRR5RWdBdLiiEHH2G19GPJNaKbuKW9Lg6",
+        "events": [
+          {
+            "id": {
+              "txDigest": "HZBiJrtAEwYQRR5RWdBdLiiEHH2G19GPJNaKbuKW9Lg6",
+              "eventSeq": "0"
+            },
+            "packageId": "0xea4145440c4a4b9f7bba7e930976aae24b50f787483a3a4e13333b1a96e184d9",
+            "transactionModule": "M",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0xea4145440c4a4b9f7bba7e930976aae24b50f787483a3a4e13333b1a96e184d9::M::P1MQux",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "Af1PAJLskrdib4hx6u89DaADdnEfM73eGLVtkJftgaW8",
+        "events": [
+          {
+            "id": {
+              "txDigest": "Af1PAJLskrdib4hx6u89DaADdnEfM73eGLVtkJftgaW8",
+              "eventSeq": "0"
+            },
+            "packageId": "0xea4145440c4a4b9f7bba7e930976aae24b50f787483a3a4e13333b1a96e184d9",
+            "transactionModule": "M",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0xea4145440c4a4b9f7bba7e930976aae24b50f787483a3a4e13333b1a96e184d9::M::P1MQux",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      },
+      {
+        "digest": "2XG8YQL2WnmCK6mX6eAqienY1r7QV5e31S2MnXv5AHk4",
+        "events": [
+          {
+            "id": {
+              "txDigest": "2XG8YQL2WnmCK6mX6eAqienY1r7QV5e31S2MnXv5AHk4",
+              "eventSeq": "0"
+            },
+            "packageId": "0xea4145440c4a4b9f7bba7e930976aae24b50f787483a3a4e13333b1a96e184d9",
+            "transactionModule": "M",
+            "sender": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a",
+            "type": "0xea4145440c4a4b9f7bba7e930976aae24b50f787483a3a4e13333b1a96e184d9::M::P1MQux",
+            "parsedJson": {
+              "dummy_field": false
+            },
+            "bcsEncoding": "base64",
+            "bcs": "AA==",
+            "timestampMs": "0"
+          }
+        ],
+        "timestampMs": "0",
+        "checkpoint": "1"
+      }
+    ],
+    "nextCursor": "MTQ=",
+    "hasNextPage": false
+  }
+}
+
+task 19, lines 126-142:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 3,
+  "error": {
+    "code": -32602,
+    "message": "Invalid Params: Cannot filter by function name \"bar\" without specifying a module"
+  }
+}
+
+task 20, lines 144-159:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 4,
+  "error": {
+    "code": -32602,
+    "message": "Invalid params",
+    "data": "missing field `package` at line 1 column 40"
+  }
+}
