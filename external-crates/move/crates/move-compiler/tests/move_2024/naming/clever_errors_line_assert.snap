@@ -1,0 +1,22 @@
+---
+source: crates/move-compiler/tests/move_check_testsuite.rs
+info:
+  flavor: core
+  edition: 2024.alpha
+  lint: false
+---
+warning[W00001]: DEPRECATED. will be removed
+  ┌─ tests/move_2024/naming/clever_errors_line_assert.move:3:9
+  │
+3 │         assert(false);
+  │         ^^^^^^^^^^^^^ 'assert' function syntax has been deprecated and will be removed
+  │
+  = Replace with 'assert!'. 'assert' has been replaced with a 'assert!' built-in macro so that arguments are no longer eagerly evaluated
+
+error[E13002]: feature is deprecated in specified edition
+  ┌─ tests/move_2024/naming/clever_errors_line_assert.move:3:9
+  │
+3 │         assert(false);
+  │         ^^^^^^^^^^^^^ 'assert' function syntax has been deprecated and cannot be used with clever assertions
+  │
+  = Replace with 'assert!'. 'assert' has been replaced with a 'assert!' built-in macro so that arguments are no longer eagerly evaluated
