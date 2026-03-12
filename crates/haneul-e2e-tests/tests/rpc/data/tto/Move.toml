@@ -1,0 +1,9 @@
+[package]
+name = "tto"
+edition = "2024.beta"
+
+[dependencies]
+Haneul = { local = "../../../../../haneul-framework/packages/haneul-framework" }
+
+[addresses]
+tto = "0x0"
