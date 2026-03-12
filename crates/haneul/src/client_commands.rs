@@ -1,0 +1,3945 @@
+// Copyright (c) Mysten Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use crate::{
+    clever_error_rendering::render_clever_error_opt,
+    client_ptb::ptb::PTB,
+    displays::Pretty,
+    upgrade_compatibility::check_compatibility,
+    verifier_meter::{AccumulatingMeter, Accumulator},
+};
+use futures::TryStreamExt;
+use std::{
+    collections::{BTreeMap, BTreeSet, btree_map::Entry},
+    fmt::{Debug, Display, Formatter, Write},
+    fs,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+};
+use haneul_rpc::proto::haneul::rpc::v2::{self as proto};
+
+use anyhow::{Context, anyhow, bail, ensure};
+use bip32::DerivationPath;
+use clap::*;
+use colored::Colorize;
+use fastcrypto::{
+    encoding::{Base64, Encoding},
+    traits::ToFromBytes,
+};
+use reqwest::StatusCode;
+
+use move_binary_format::CompiledModule;
+use move_bytecode_utils::module_cache::GetModule;
+use move_bytecode_verifier_meter::Scope;
+use move_core_types::{
+    account_address::AccountAddress,
+    identifier::Identifier,
+    language_storage::{ModuleId, StructTag, TypeTag},
+};
+use move_package_alt::{PackageLoader, schema::ModeName};
+use move_package_alt_compilation::build_config::BuildConfig as MoveBuildConfig;
+use prometheus::Registry;
+use serde::Serialize;
+use serde_json::{Value, json};
+use haneul_config::verifier_signing_config::VerifierSigningConfig;
+use haneul_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
+
+use shared_crypto::intent::Intent;
+use haneul_json::HaneulJsonValue;
+use haneul_json_rpc_types::{
+    BalanceChange as RpcBalanceChange, BcsEvent, Coin, DryRunTransactionBlockResponse,
+    ObjectChange as RpcObjectChange, HaneulEvent, HaneulTransactionBlock, HaneulTransactionBlockEffects,
+    HaneulTransactionBlockEvents, HaneulTransactionBlockResponse,
+};
+use haneul_keys::key_identity::KeyIdentity;
+use haneul_keys::keystore::AccountKeystore;
+use haneul_move_build::{BuildConfig, CompiledPackage, PackageDependencies};
+use haneul_package_management::LockCommand;
+use haneul_rpc_api::{
+    Client,
+    client::{ExecutedTransaction, SimulateTransactionResponse},
+};
+use haneul_sdk::{
+    HANEUL_COIN_TYPE, HANEUL_DEVNET_URL, HANEUL_LOCAL_NETWORK_URL, HANEUL_LOCAL_NETWORK_URL_0, HANEUL_TESTNET_URL,
+    haneul_client_config::{HaneulClientConfig, HaneulEnv},
+    haneul_sdk_types::bcs::ToBcs,
+    wallet_context::WalletContext,
+};
+use haneul_types::{
+    HANEUL_FRAMEWORK_ADDRESS, HANEUL_FRAMEWORK_PACKAGE_ID,
+    base_types::{FullObjectID, ObjectID, ObjectRef, ObjectType, SequenceNumber, HaneulAddress},
+    coin::{COIN_MODULE_NAME, COIN_STRUCT_NAME},
+    crypto::{EmptySignInfo, SignatureScheme},
+    digests::TransactionDigest,
+    effects::TransactionEffectsAPI,
+    error::HaneulErrorKind,
+    event::EventID,
+    execution_status::ExecutionStatus,
+    gas::GasCostSummary,
+    gas_coin::GasCoin,
+    message_envelope::Envelope,
+    metrics::BytecodeVerifierMetrics,
+    move_package::{MovePackage, UpgradeCap},
+    object::{Object, Owner},
+    parse_haneul_type_tag,
+    programmable_transaction_builder::ProgrammableTransactionBuilder,
+    signature::GenericSignature,
+    haneul_sdk_types_conversions::type_tag_sdk_to_core,
+    transaction::{
+        Command, InputObjectKind, ObjectArg, SenderSignedData, SharedObjectMutability, Transaction,
+        TransactionData, TransactionDataAPI, TransactionKind,
+    },
+};
+
+use json_to_table::json_to_table;
+use tabled::{
+    builder::Builder as TableBuilder,
+    settings::{
+        Alignment as TableAlignment, Border as TableBorder, Modify as TableModify,
+        Panel as TablePanel, Style as TableStyle,
+        object::{Cell as TableCell, Columns as TableCols, Rows as TableRows},
+        span::Span as TableSpan,
+        style::HorizontalLine,
+    },
+};
+
+use move_package_alt::{
+    RootPackage,
+    schema::{OriginalID, Publication, PublishAddresses, PublishedID},
+};
+use move_symbol_pool::Symbol;
+use haneul_keys::key_derive;
+use haneul_package_alt::{BuildParams, HaneulFlavor, find_environment};
+use haneul_source_validation::{BytecodeSourceVerifier, ValidationMode};
+use haneul_types::digests::ChainIdentifier;
+use tracing::{debug, info};
+
+pub(crate) static USER_AGENT: &str =
+    concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"),);
+
+/// Only to be used within CLI
+pub const GAS_SAFE_OVERHEAD: u64 = 1000;
+
+#[derive(Parser)]
+#[clap(rename_all = "kebab-case")]
+pub enum HaneulClientCommands {
+    /// Default address used for commands when none specified
+    #[clap(name = "active-address")]
+    ActiveAddress,
+    /// Default environment used for commands when none specified
+    #[clap(name = "active-env")]
+    ActiveEnv,
+    /// Obtain the Addresses managed by the client.
+    #[clap(name = "addresses")]
+    Addresses {
+        /// Sort by alias instead of address
+        #[clap(long, short = 's')]
+        sort_by_alias: bool,
+    },
+    /// List the coin balance of an address
+    #[clap(name = "balance")]
+    Balance {
+        /// Address (or its alias)
+        #[arg(value_parser)]
+        address: Option<KeyIdentity>,
+        /// Show balance for the specified coin (e.g., 0x2::haneul::HANEUL).
+        /// All coins will be shown if none is passed.
+        #[clap(long, required = false)]
+        coin_type: Option<String>,
+        /// Show a list with each coin's object ID and balance
+        #[clap(long, required = false)]
+        with_coins: bool,
+    },
+    /// Call Move function
+    #[clap(name = "call")]
+    Call {
+        /// Object ID of the package, which contains the module
+        #[clap(long)]
+        package: ObjectID,
+        /// The name of the module in the package
+        #[clap(long)]
+        module: String,
+        /// Function name in module
+        #[clap(long)]
+        function: String,
+        /// Type arguments to the generic function being called.
+        /// All must be specified, or the call will fail.
+        #[clap(
+            long,
+            value_parser = parse_haneul_type_tag,
+            num_args(1..),
+        )]
+        type_args: Vec<TypeTag>,
+        /// Simplified ordered args like in the function syntax
+        /// ObjectIDs, Addresses must be hex strings
+        #[clap(long, num_args(1..))]
+        args: Vec<HaneulJsonValue>,
+
+        #[clap(flatten)]
+        payment: PaymentArgs,
+
+        #[clap(flatten)]
+        gas_data: GasDataArgs,
+
+        #[clap(flatten)]
+        processing: TxProcessingArgs,
+    },
+
+    /// Query the chain identifier from the rpc endpoint.
+    #[clap(name = "chain-identifier")]
+    ChainIdentifier,
+
+    /// Query a dynamic field by its address.
+    #[clap(name = "dynamic-field")]
+    DynamicFieldQuery {
+        ///The ID of the parent object
+        #[clap(name = "object_id")]
+        id: ObjectID,
+        /// Optional paging cursor
+        #[clap(long)]
+        cursor: Option<String>,
+        /// Maximum item returned per page
+        #[clap(long, default_value = "50")]
+        limit: u32,
+    },
+
+    /// List all Haneul environments
+    Envs,
+
+    /// Execute a Signed Transaction. This is useful when the user prefers to sign elsewhere and use this command to execute.
+    ExecuteSignedTx {
+        /// BCS serialized transaction data bytes without its type tag, as base64 encoded string. This is the output of haneul client command using --serialize-unsigned-transaction.
+        #[clap(long)]
+        tx_bytes: String,
+
+        /// A list of Base64 encoded signatures `flag || signature || pubkey`.
+        #[clap(long)]
+        signatures: Vec<String>,
+    },
+    /// Execute a combined serialized SenderSignedData string.
+    ExecuteCombinedSignedTx {
+        /// BCS serialized sender signed data, as base64 encoded string. This is the output of haneul client command using --serialize-signed-transaction.
+        #[clap(long)]
+        signed_tx_bytes: String,
+    },
+
+    /// Request gas coin from faucet. By default, it will use the active address and the active network.
+    #[clap[name = "faucet"]]
+    Faucet {
+        /// Address (or its alias)
+        #[clap(long)]
+        #[arg(value_parser)]
+        address: Option<KeyIdentity>,
+        /// The url to the faucet
+        #[clap(long)]
+        url: Option<String>,
+    },
+
+    /// Obtain all gas objects owned by the address.
+    /// An address' alias can be used instead of the address.
+    #[clap(name = "gas")]
+    Gas {
+        /// Address (or its alias) owning the objects
+        #[clap(name = "owner_address")]
+        #[arg(value_parser)]
+        address: Option<KeyIdentity>,
+    },
+
+    /// Merge two coin objects into one coin
+    MergeCoin {
+        /// The address of the coin to merge into.
+        #[clap(long)]
+        primary_coin: ObjectID,
+        /// The address of the coin to be merged.
+        #[clap(long)]
+        coin_to_merge: ObjectID,
+
+        #[clap(flatten)]
+        payment: PaymentArgs,
+
+        #[clap(flatten)]
+        gas_data: GasDataArgs,
+
+        #[clap(flatten)]
+        processing: TxProcessingArgs,
+    },
+
+    /// Generate new address and keypair with keypair scheme flag {ed25519 | secp256k1 | secp256r1}
+    /// with optional derivation path, default to m/44'/784'/0'/0'/0' for ed25519 or
+    /// m/54'/784'/0'/0/0 for secp256k1 or m/74'/784'/0'/0/0 for secp256r1. Word length can be
+    /// { word12 | word15 | word18 | word21 | word24} default to word12 if not specified.
+    #[clap(name = "new-address")]
+    NewAddress {
+        key_scheme: SignatureScheme,
+        /// The alias must start with a letter and can contain only letters, digits, hyphens (-), or underscores (_).
+        alias: Option<String>,
+        word_length: Option<String>,
+        derivation_path: Option<DerivationPath>,
+    },
+
+    /// Add new Haneul environment.
+    #[clap(name = "new-env")]
+    NewEnv {
+        #[clap(long)]
+        alias: String,
+        #[clap(long, value_hint = ValueHint::Url)]
+        rpc: String,
+        #[clap(long, value_hint = ValueHint::Url)]
+        ws: Option<String>,
+        #[clap(long, help = "Basic auth in the format of username:password")]
+        basic_auth: Option<String>,
+    },
+
+    /// Get object info
+    #[clap(name = "object")]
+    Object {
+        /// Object ID of the object to fetch
+        #[clap(name = "object_id")]
+        id: ObjectID,
+
+        /// Return the bcs serialized version of the object
+        #[clap(long)]
+        bcs: bool,
+    },
+    /// Obtain all objects owned by the address. It also accepts an address by its alias.
+    #[clap(name = "objects")]
+    Objects {
+        /// Address owning the object. If no address is provided, it will show all
+        /// objects owned by `haneul client active-address`.
+        #[clap(name = "owner_address")]
+        address: Option<KeyIdentity>,
+    },
+
+    /// Transfer object to party ownership
+    #[clap(name = "party-transfer")]
+    PartyTransfer {
+        /// Recipient address (or its alias if it's an address in the keystore)
+        #[clap(long)]
+        to: KeyIdentity,
+
+        /// ID of the object to transfer
+        #[clap(long)]
+        object_id: ObjectID,
+
+        #[clap(flatten)]
+        payment: PaymentArgs,
+
+        #[clap(flatten)]
+        gas_data: GasDataArgs,
+
+        #[clap(flatten)]
+        processing: TxProcessingArgs,
+    },
+
+    /// Pay coins to recipients following specified amounts, with input coins.
+    /// Length of recipients must be the same as that of amounts.
+    #[clap(name = "pay")]
+    Pay {
+        /// The input coins to be used for pay recipients, following the specified amounts.
+        #[clap(long, num_args(1..))]
+        input_coins: Vec<ObjectID>,
+
+        /// The recipient addresses, must be of same length as amounts.
+        /// Aliases of addresses are also accepted as input.
+        #[clap(long, num_args(1..))]
+        recipients: Vec<KeyIdentity>,
+
+        /// The amounts to be paid, following the order of recipients.
+        #[clap(long, num_args(1..))]
+        amounts: Vec<u64>,
+
+        #[clap(flatten)]
+        payment: PaymentArgs,
+
+        #[clap(flatten)]
+        gas_data: GasDataArgs,
+
+        #[clap(flatten)]
+        processing: TxProcessingArgs,
+    },
+
+    /// Pay all residual HANEUL coins to the recipient with input coins, after deducting the gas cost.
+    /// The input coins also include the coin for gas payment, so no extra gas coin is required.
+    PayAllHaneul {
+        /// The input coins to be used for pay recipients, including the gas coin.
+        #[clap(long, num_args(1..))]
+        input_coins: Vec<ObjectID>,
+
+        /// The recipient address (or its alias if it's an address in the keystore).
+        #[clap(long)]
+        recipient: KeyIdentity,
+
+        #[clap(flatten)]
+        gas_data: GasDataArgs,
+
+        #[clap(flatten)]
+        processing: TxProcessingArgs,
+    },
+
+    /// Pay HANEUL coins to recipients following specified amounts, with input coins.
+    /// Length of recipients must be the same as that of amounts.
+    /// The input coins also include the coin for gas payment, so no extra gas coin is required.
+    PayHaneul {
+        /// The input coins to be used for pay recipients, including the gas coin.
+        #[clap(long, num_args(1..))]
+        input_coins: Vec<ObjectID>,
+
+        /// The recipient addresses, must be of same length as amounts.
+        /// Aliases of addresses are also accepted as input.
+        #[clap(long, num_args(1..))]
+        recipients: Vec<KeyIdentity>,
+
+        /// The amounts to be paid, following the order of recipients.
+        #[clap(long, num_args(1..))]
+        amounts: Vec<u64>,
+
+        #[clap(flatten)]
+        gas_data: GasDataArgs,
+
+        #[clap(flatten)]
+        processing: TxProcessingArgs,
+    },
+
+    // Run a PTB from the provided args
+    #[clap(name = "ptb")]
+    PTB(PTB),
+
+    /// Publish Move modules
+    #[clap(name = "publish")]
+    Publish(PublishArgs),
+
+    /// Publish a package using ephemeral addresses for dependencies.
+    #[clap(
+        name = "test-publish",
+        after_long_help = "The `test-publish` command is used to publish packages ephemerally, i.e. without recording the published addresses in the main `Published.toml` file. Running `haneul client test-publish --pubfile-path <pubfile> --build-env <env>` will build the package for environment <env>, but will publish it on the current network, taking the dependency addresses from <pubfile>. It will also record the publication information for the package in <pubfile>. \n\
+                \n\
+                See https://docs.haneul.io/guides/developer/haneul-101/move-package-management for more information."
+    )]
+    TestPublish(TestPublishArgs),
+
+    /// Upgrade Move modules
+    #[clap(name = "upgrade")]
+    Upgrade(UpgradeArgs),
+
+    #[clap(
+        name = "test-upgrade",
+        after_long_help = "The `test-upgrade` command is used to upgrade ephemeral packages, for packages published using `test-publish` command. This does not write publication info to `Published.toml` file. Running `haneul client test-upgrade --pubfile-path <pubfile> --build-env <env>` will build the package for environment <env>, but will publish it on the current network, taking the dependency addresses from <pubfile>. It will also record the publication information for the package in <pubfile>. \n\
+            \n\
+            See https://docs.haneul.io/guides/developer/haneul-101/move-package-management for more information."
+    )]
+    TestUpgrade(TestUpgradeArgs),
+
+    /// Execute, dry-run, dev-inspect or otherwise inspect an already serialized transaction.
+    SerializedTx {
+        /// Base64-encoded BCS-serialized TransactionData.
+        tx_bytes: String,
+
+        #[clap(flatten)]
+        processing: TxProcessingArgs,
+    },
+
+    /// Execute, dry-run, dev-inspect or otherwise inspect an already serialized transaction kind.
+    SerializedTxKind {
+        /// Base64-encoded BCS-serialized TransactionKind.
+        tx_bytes: String,
+
+        #[clap(flatten)]
+        payment: PaymentArgs,
+
+        #[clap(flatten)]
+        gas_data: GasDataArgs,
+
+        #[clap(flatten)]
+        processing: TxProcessingArgs,
+    },
+
+    /// Split a coin object into multiple coins.
+    #[clap(group(ArgGroup::new("split").required(true).args(&["amounts", "count"])))]
+    SplitCoin {
+        /// ID of the coin object to split
+        #[clap(long)]
+        coin_id: ObjectID,
+        /// Specific amounts to split out from the coin
+        #[clap(long, num_args(1..))]
+        amounts: Option<Vec<u64>>,
+        /// Count of equal-size coins to split into
+        #[clap(long)]
+        count: Option<u64>,
+
+        #[clap(flatten)]
+        payment: PaymentArgs,
+
+        #[clap(flatten)]
+        gas_data: GasDataArgs,
+
+        #[clap(flatten)]
+        processing: TxProcessingArgs,
+    },
+
+    /// Switch active address and network(e.g., devnet, local rpc server).
+    #[clap(name = "switch")]
+    Switch {
+        /// An address to be used as the active address for subsequent
+        /// commands. It accepts also the alias of the address.
+        #[clap(long)]
+        address: Option<KeyIdentity>,
+        /// The RPC server URL (e.g., local rpc server, devnet rpc server, etc) to be
+        /// used for subsequent commands.
+        #[clap(long)]
+        env: Option<String>,
+    },
+
+    /// Get the effects of executing the given transaction block
+    #[clap(name = "tx-block")]
+    TransactionBlock {
+        /// Digest of the transaction block
+        #[clap(name = "digest")]
+        digest: TransactionDigest,
+    },
+
+    /// Transfer object
+    #[clap(name = "transfer")]
+    Transfer {
+        /// Recipient address (or its alias if it's an address in the keystore)
+        #[clap(long)]
+        to: KeyIdentity,
+
+        /// ID of the object to transfer
+        #[clap(long)]
+        object_id: ObjectID,
+
+        #[clap(flatten)]
+        payment: PaymentArgs,
+
+        #[clap(flatten)]
+        gas_data: GasDataArgs,
+
+        #[clap(flatten)]
+        processing: TxProcessingArgs,
+    },
+
+    /// Transfer HANEUL, and pay gas with the same HANEUL coin object.
+    /// If amount is specified, only the amount is transferred; otherwise the entire object
+    /// is transferred.
+    #[clap(name = "transfer-haneul")]
+    TransferHaneul {
+        /// Recipient address (or its alias if it's an address in the keystore)
+        #[clap(long)]
+        to: KeyIdentity,
+
+        /// ID of the coin to transfer. This is also the gas object.
+        #[clap(long)]
+        haneul_coin_object_id: ObjectID,
+
+        /// The amount to transfer, if not specified, the entire coin object will be transferred.
+        #[clap(long)]
+        amount: Option<u64>,
+
+        #[clap(flatten)]
+        gas_data: GasDataArgs,
+
+        #[clap(flatten)]
+        processing: TxProcessingArgs,
+    },
+
+    /// Run the bytecode verifier on the package
+    #[clap(name = "verify-bytecode-meter")]
+    VerifyBytecodeMeter {
+        /// Path to directory containing a Move package, (defaults to the current directory)
+        #[clap(name = "package", long, global = true)]
+        package_path: Option<PathBuf>,
+
+        /// Protocol version to use for the bytecode verifier (defaults to the latest protocol
+        /// version)
+        #[clap(name = "protocol-version", long)]
+        protocol_version: Option<u64>,
+
+        /// Paths to specific pre-compiled module bytecode to verify (instead of an entire package).
+        /// Multiple modules can be verified by passing multiple --module flags. They will be
+        /// treated as if they were one package (subject to the overall package limit).
+        #[clap(name = "module", long, action = clap::ArgAction::Append, global = true)]
+        module_paths: Vec<PathBuf>,
+
+        /// Package build options
+        #[clap(flatten)]
+        build_config: MoveBuildConfig,
+    },
+
+    /// Verify local Move packages against on-chain packages, and optionally their dependencies.
+    #[clap(name = "verify-source")]
+    VerifySource {
+        /// Path to directory containing a Move package
+        #[clap(name = "package_path", global = true, default_value = ".")]
+        package_path: PathBuf,
+
+        /// Package build options
+        #[clap(flatten)]
+        build_config: MoveBuildConfig,
+
+        /// Verify on-chain dependencies.
+        #[clap(long)]
+        verify_deps: bool,
+
+        /// Don't verify source (only valid if --verify-deps is enabled).
+        #[clap(long)]
+        skip_source: bool,
+
+        /// If specified, override the addresses for the package's own modules with this address.
+        /// Only works for unpublished modules (whose addresses are currently 0x0).
+        #[clap(long)]
+        address_override: Option<ObjectID>,
+    },
+
+    /// Remove an existing address by its alias or hexadecimal string.
+    #[clap(name = "remove-address")]
+    RemoveAddress { alias_or_address: String },
+
+    /// Replay a given transaction to view transaction effects (deprecated; use `haneul replay` instead)
+    #[clap(name = "replay-transaction")]
+    ReplayTransaction {},
+
+    /// Replay transactions listed in a file (deprecated; use `haneul replay` instead)
+    #[clap(name = "replay-batch")]
+    ReplayBatch {},
+
+    /// Replay all transactions in a range of checkpoints (deprecated; use `haneul replay` instead)
+    #[clap(name = "replay-checkpoint")]
+    ReplayCheckpoints {},
+}
+
+/// Arguments related to providing coins for gas payment
+#[derive(Args, Debug, Default)]
+pub struct PaymentArgs {
+    /// IDs of gas objects to be used for gas payment. If none are provided, coins are selected
+    /// automatically to cover the gas budget.
+    #[clap(long, num_args(1..))]
+    pub gas: Vec<ObjectID>,
+}
+
+/// Arguments related to setting gas data, apart from payment coins.
+#[derive(Args, Debug, Default, Clone)]
+pub struct GasDataArgs {
+    /// An optional gas budget for this transaction (in GEUNHWA). If gas budget is not provided, the
+    /// tool will first perform a dry run to estimate the gas cost, and then it will execute the
+    /// transaction. Please note that this incurs a small cost in performance due to the additional
+    /// dry run call.
+    #[arg(long)]
+    pub gas_budget: Option<u64>,
+    /// An optional gas price for this transaction (in GEUNHWA). If gas price is not provided, the
+    /// tool will use the current reference gas price from RPC.
+    ///
+    /// Transactions with a gas price lower than the reference will not be signed by enough
+    /// validators to execute. Transactions accessing congested shared objects are prioritized by
+    /// gas price, so setting a higher gas price higher than the reference can ensure the
+    /// transaction accesses the shared object sooner.
+    #[arg(long)]
+    pub gas_price: Option<u64>,
+    /// An optional field to specify a gas sponsor address. If provided, the gas owner is set to
+    /// this address, rather than the transaction's sender.
+    ///
+    /// Note that if the CLI does not have access to the sponsor's keys, it will not be able to
+    /// sign and execute transactions that have a sponsor set.
+    #[arg(long)]
+    pub gas_sponsor: Option<HaneulAddress>,
+}
+
+/// Arguments related to what to do to a transaction after it has been built.
+#[derive(Args, Debug, Default, Clone)]
+pub struct TxProcessingArgs {
+    /// Compute the transaction digest and print it out, but do not execute the transaction.
+    #[arg(long)]
+    pub tx_digest: bool,
+    /// Perform a dry run of the transaction, without executing it.
+    #[arg(long)]
+    pub dry_run: bool,
+    /// Perform a dev inspect
+    #[arg(long)]
+    pub dev_inspect: bool,
+    /// Instead of executing the transaction, serialize the bcs bytes of the unsigned transaction data
+    /// (TransactionData) using base64 encoding, and print out the string <TX_BYTES>. The string can
+    /// be used to execute transaction with `haneul client execute-signed-tx --tx-bytes <TX_BYTES>`.
+    #[arg(long)]
+    pub serialize_unsigned_transaction: bool,
+    /// Instead of executing the transaction, serialize the bcs bytes of the signed transaction data
+    /// (SenderSignedData) using base64 encoding, and print out the string <SIGNED_TX_BYTES>. The
+    /// string can be used to execute transaction with
+    /// `haneul client execute-combined-signed-tx --signed-tx-bytes <SIGNED_TX_BYTES>`.
+    #[arg(long)]
+    pub serialize_signed_transaction: bool,
+    /// Set the transaction sender to this address. When not specified, the sender is inferred
+    /// by finding the owner of the gas payment. Note that when setting this field, the
+    /// transaction will fail to execute if the sender's private key is not in the keystore;
+    /// similarly, it will fail when using this with `--serialize-signed-transaction` flag if the
+    /// private key corresponding to this address is not in keystore.
+    #[arg(long, required = false, value_parser)]
+    pub sender: Option<HaneulAddress>,
+}
+
+#[derive(Args, Debug, Default)]
+pub struct PublishArgs {
+    /// Path to directory containing a Move package
+    #[clap(name = "package_path", global = true, default_value = ".")]
+    pub package_path: PathBuf,
+
+    /// Package build options
+    #[clap(flatten)]
+    pub build_config: MoveBuildConfig,
+
+    /// Publish the package without checking whether dependency source code compiles to the
+    /// on-chain bytecode
+    #[clap(long)]
+    pub skip_dependency_verification: bool,
+
+    /// Check that the dependency source code compiles to the on-chain bytecode before
+    /// publishing the package (currently the default behavior)
+    #[clap(long, conflicts_with = "skip_dependency_verification")]
+    pub verify_deps: bool,
+
+    /// Also publish transitive dependencies that have not already been published.
+    #[clap(long)]
+    pub with_unpublished_dependencies: bool,
+
+    #[clap(flatten)]
+    pub payment: PaymentArgs,
+
+    #[clap(flatten)]
+    pub gas_data: GasDataArgs,
+
+    #[clap(flatten)]
+    pub processing: TxProcessingArgs,
+}
+
+#[derive(Args, Debug, Default)]
+pub struct UpgradeArgs {
+    /// Path to directory containing a Move package
+    #[clap(name = "package_path", global = true, default_value = ".")]
+    pub package_path: PathBuf,
+
+    /// ID of the upgrade capability for the package being upgraded.
+    #[clap(long, short = 'c')]
+    pub upgrade_capability: Option<ObjectID>,
+
+    /// Package build options
+    #[clap(flatten)]
+    pub build_config: MoveBuildConfig,
+
+    /// Skip verifying package compatibility locally before publishing.
+    #[clap(long)]
+    pub skip_verify_compatibility: bool,
+
+    /// Upgrade the package without checking whether dependency source code compiles to the on-chain
+    /// bytecode
+    #[clap(long)]
+    pub skip_dependency_verification: bool,
+
+    /// Check that the dependency source code compiles to the on-chain bytecode before
+    /// upgrading the package (currently the default behavior)
+    #[clap(long, conflicts_with = "skip_dependency_verification")]
+    pub verify_deps: bool,
+
+    /// Also publish transitive dependencies that have not already been published.
+    #[clap(long)]
+    pub with_unpublished_dependencies: bool,
+
+    #[clap(flatten)]
+    pub payment: PaymentArgs,
+
+    #[clap(flatten)]
+    pub gas_data: GasDataArgs,
+
+    #[clap(flatten)]
+    pub processing: TxProcessingArgs,
+}
+
+/// Returns the pubfile path, or a default based on the environment alias if not specified
+fn get_pubfile_path_or_default(pubfile_path: Option<&PathBuf>, alias: &str) -> PathBuf {
+    pubfile_path
+        .cloned()
+        .unwrap_or_else(|| PathBuf::from(format!("Pub.{alias}.toml")))
+}
+
+#[derive(Args, Debug, Default)]
+pub struct TestPublishArgs {
+    #[clap(flatten)]
+    pub publish_args: PublishArgs,
+    #[clap(long, default_value = "false")]
+    /// Publishes transitive dependencies that have not already been published.
+    pub publish_unpublished_deps: bool,
+}
+
+#[derive(Args, Debug, Default)]
+pub struct TestUpgradeArgs {
+    #[clap(flatten)]
+    pub upgrade_args: UpgradeArgs,
+}
+#[derive(serde::Deserialize, Debug)]
+struct FaucetResponse {
+    error: Option<String>,
+}
+
+impl HaneulClientCommands {
+    pub async fn execute(
+        self,
+        context: &mut WalletContext,
+    ) -> Result<HaneulClientCommandResult, anyhow::Error> {
+        let ret = match self {
+            HaneulClientCommands::ReplayTransaction {} => {
+                eprintln!("This command is deprecated. Use `haneul replay` instead.");
+                HaneulClientCommandResult::NoOutput
+            }
+            HaneulClientCommands::ReplayBatch {} => {
+                eprintln!("This command is deprecated. Use `haneul replay` instead.");
+                HaneulClientCommandResult::NoOutput
+            }
+            HaneulClientCommands::ReplayCheckpoints {} => {
+                eprintln!("This command is deprecated. Use `haneul replay` instead.");
+                HaneulClientCommandResult::NoOutput
+            }
+            HaneulClientCommands::Addresses { sort_by_alias } => {
+                let active_address = context.active_address()?;
+                let mut addresses: Vec<(String, HaneulAddress)> = context
+                    .addresses_with_alias()
+                    .into_iter()
+                    .map(|(address, alias)| (alias.alias.to_string(), *address))
+                    .collect();
+
+                if sort_by_alias {
+                    addresses.sort();
+                }
+
+                let output = AddressesOutput {
+                    active_address,
+                    addresses,
+                };
+                HaneulClientCommandResult::Addresses(output)
+            }
+            HaneulClientCommands::Balance {
+                address,
+                coin_type,
+                with_coins,
+            } => {
+                let address = context.get_identity_address(address)?;
+                let _ = context.cache_chain_id().await?;
+
+                let client = context.grpc_client()?;
+                let coin_type = if let Some(ty) = coin_type {
+                    let ty = ty.parse::<TypeTag>()?;
+                    haneul_types::coin::Coin::type_(ty)
+                } else {
+                    StructTag {
+                        address: HANEUL_FRAMEWORK_ADDRESS,
+                        name: COIN_STRUCT_NAME.to_owned(),
+                        module: COIN_MODULE_NAME.to_owned(),
+                        type_params: vec![],
+                    }
+                };
+
+                let objects: Vec<Coin> = client
+                    .list_owned_objects(address, Some(coin_type))
+                    .try_filter_map(|o| async move {
+                        let Ok(Some((coin_type, balance))) =
+                            haneul_types::coin::Coin::extract_balance_if_coin(&o)
+                        else {
+                            return Ok(None);
+                        };
+                        Ok(Some(Coin {
+                            coin_type: coin_type.to_canonical_string(true),
+                            coin_object_id: o.id(),
+                            version: o.version(),
+                            digest: o.digest(),
+                            balance,
+                            previous_transaction: o.previous_transaction,
+                        }))
+                    })
+                    .try_collect()
+                    .await?;
+
+                fn canonicalize_type(type_: &str) -> Result<String, anyhow::Error> {
+                    Ok(TypeTag::from_str(type_)
+                        .context("Cannot parse coin type")?
+                        .to_canonical_string(/* with_prefix */ true))
+                }
+
+                let mut coins_by_type = BTreeMap::new();
+                for c in objects {
+                    let coins = match coins_by_type.entry(canonicalize_type(&c.coin_type)?) {
+                        Entry::Vacant(entry) => {
+                            let ty = StructTag::from_str(&c.coin_type)?;
+                            let metadata = client.get_coin_info(&ty).await.ok();
+
+                            &mut entry.insert((metadata, vec![])).1
+                        }
+                        Entry::Occupied(entry) => &mut entry.into_mut().1,
+                    };
+
+                    coins.push(c);
+                }
+                let haneul_type_tag = canonicalize_type(HANEUL_COIN_TYPE)?;
+
+                // show HANEUL first
+                let ordered_coins_haneul_first = coins_by_type
+                    .remove(&haneul_type_tag)
+                    .into_iter()
+                    .chain(coins_by_type.into_values())
+                    .collect();
+
+                HaneulClientCommandResult::Balance(ordered_coins_haneul_first, with_coins)
+            }
+
+            HaneulClientCommands::DynamicFieldQuery { id, cursor, limit } => {
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
+                let page_token = cursor
+                    .map(|c| Base64::decode(&c))
+                    .transpose()?
+                    .map(Into::into);
+                let df_read = client
+                    .get_dynamic_fields(id, Some(limit), page_token)
+                    .await?;
+                HaneulClientCommandResult::DynamicFieldQuery(df_read)
+            }
+
+            HaneulClientCommands::Upgrade(args) => {
+                verify_no_test_mode(&args.build_config)?;
+                verify_no_pubfile_path(&args.build_config, "upgrade")?;
+                let _ = context.cache_chain_id().await?;
+                upgrade_command(args, context, false).await?
+            }
+
+            HaneulClientCommands::TestUpgrade(args) => {
+                verify_no_test_mode(&args.upgrade_args.build_config)?;
+                upgrade_command(args.upgrade_args, context, true).await?
+            }
+
+            HaneulClientCommands::Publish(args) => {
+                verify_no_test_mode(&args.build_config)?;
+                verify_no_pubfile_path(&args.build_config, "publish")?;
+                let _ = context.cache_chain_id().await?;
+                let mut root_package = load_root_pkg_for_publish_upgrade(
+                    context,
+                    &args.build_config,
+                    args.package_path.as_path(),
+                )
+                .await?;
+
+                publish_command(args, &mut root_package, context).await?
+            }
+
+            HaneulClientCommands::TestPublish(args) => {
+                verify_no_test_mode(&args.publish_args.build_config)?;
+
+                let client = context.grpc_client()?;
+                let chain_id = client.get_chain_identifier().await?.to_string();
+                let active_env = context.get_active_env()?;
+                let alias = active_env.alias.clone();
+
+                let modes = args.publish_args.build_config.mode_set();
+                let build_env = args.publish_args.build_config.environment.clone();
+                // We produce a pub file path only once, even for transitive deps.
+                let pubfile_path = get_pubfile_path_or_default(
+                    args.publish_args.build_config.pubfile_path.as_ref(),
+                    &alias,
+                );
+
+                // Do a transitive publication for each dependency that is not yet published
+                if args.publish_unpublished_deps {
+                    publish_ephemeral_unpublished_dependencies(
+                        &args,
+                        &chain_id,
+                        build_env.clone(),
+                        pubfile_path.clone(),
+                        modes.clone(),
+                        context,
+                    )
+                    .await?;
+                }
+
+                // Load root package from scratch, as everything needs to be recomputed
+                let mut root_package = load_root_pkg_for_ephemeral_publish_or_upgrade(
+                    args.publish_args.package_path.as_path(),
+                    &chain_id,
+                    build_env.clone(),
+                    pubfile_path.clone(),
+                    modes.clone(),
+                )
+                .await?;
+
+                publish_command(args.publish_args, &mut root_package, context).await?
+            }
+
+            HaneulClientCommands::VerifyBytecodeMeter {
+                protocol_version,
+                module_paths,
+                package_path,
+                build_config,
+            } => {
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
+                let protocol_version =
+                    protocol_version.map_or(ProtocolVersion::MAX, ProtocolVersion::new);
+                let protocol_config =
+                    ProtocolConfig::get_for_version(protocol_version, Chain::Unknown);
+
+                let registry = &Registry::new();
+                let bytecode_verifier_metrics = Arc::new(BytecodeVerifierMetrics::new(registry));
+
+                let (pkg_name, modules) = match (module_paths, package_path) {
+                    (paths, Some(_)) if !paths.is_empty() => {
+                        bail!("Cannot specify both a module path and a package path")
+                    }
+
+                    (paths, None) if !paths.is_empty() => {
+                        let mut modules = Vec::with_capacity(paths.len());
+                        for path in paths {
+                            let module_bytes =
+                                fs::read(path).context("Failed to read module file")?;
+                            let module = CompiledModule::deserialize_with_defaults(&module_bytes)
+                                .context("Failed to deserialize module")?;
+                            modules.push(module);
+                        }
+                        ("<unknown>".to_string(), modules)
+                    }
+
+                    (_, package_path) => {
+                        let package_path = package_path.unwrap_or_else(|| PathBuf::from("."));
+                        let package =
+                            compile_package_simple(client, build_config, &package_path, None)
+                                .await?;
+                        let name = package
+                            .package
+                            .compiled_package_info
+                            .package_name
+                            .to_string();
+                        (name, package.get_modules().cloned().collect())
+                    }
+                };
+
+                let limits = VerifierSigningConfig::default();
+                let signing_limits = Some(limits.limits_for_signing());
+                let mut verifier = haneul_execution::verifier(
+                    &protocol_config,
+                    signing_limits,
+                    &bytecode_verifier_metrics,
+                );
+
+                println!(
+                    "Running bytecode verifier for {} module{}",
+                    modules.len(),
+                    if modules.len() != 1 { "s" } else { "" },
+                );
+
+                let mut meter = AccumulatingMeter::new();
+                verifier.meter_compiled_modules(&protocol_config, &modules, &mut meter)?;
+
+                let mut used_ticks = meter.accumulator(Scope::Package).clone();
+                used_ticks.name = pkg_name;
+
+                let meter_config = VerifierSigningConfig::default().meter_config_for_signing();
+
+                let exceeded = matches!(
+                    meter_config.max_per_pkg_meter_units,
+                    Some(allowed_ticks) if allowed_ticks < used_ticks.max_ticks(Scope::Package)
+                ) || matches!(
+                    meter_config.max_per_mod_meter_units,
+                    Some(allowed_ticks) if allowed_ticks < used_ticks.max_ticks(Scope::Module)
+                ) || matches!(
+                    meter_config.max_per_fun_meter_units,
+                    Some(allowed_ticks) if allowed_ticks < used_ticks.max_ticks(Scope::Function)
+                );
+
+                HaneulClientCommandResult::VerifyBytecodeMeter {
+                    success: !exceeded,
+                    max_package_ticks: meter_config.max_per_pkg_meter_units,
+                    max_module_ticks: meter_config.max_per_mod_meter_units,
+                    max_function_ticks: meter_config.max_per_fun_meter_units,
+                    used_ticks,
+                }
+            }
+
+            HaneulClientCommands::Object { id, bcs } => {
+                // Fetch the object ref
+                let _ = context.cache_chain_id().await?;
+                let object = context.grpc_client()?.get_object(id).await?;
+                if !bcs {
+                    HaneulClientCommandResult::Object(object)
+                } else {
+                    HaneulClientCommandResult::RawObject(object)
+                }
+            }
+
+            HaneulClientCommands::TransactionBlock { digest } => {
+                let _ = context.cache_chain_id().await?;
+                let tx_read = context.grpc_client()?.get_transaction(&digest).await?;
+                HaneulClientCommandResult::TransactionBlock(tx_read)
+            }
+
+            HaneulClientCommands::Call {
+                package,
+                module,
+                function,
+                type_args,
+                args,
+                payment,
+                gas_data,
+                processing,
+            } => {
+                // Convert all numeric input to String, this will allow number input from the CLI
+                // without failing HaneulJSON's checks.
+                let args = args
+                    .into_iter()
+                    .map(|value| HaneulJsonValue::new(convert_number_to_string(value.to_json_value())))
+                    .collect::<Result<_, _>>()?;
+
+                let type_args = type_args
+                    .into_iter()
+                    .map(|arg| arg.into())
+                    .collect::<Vec<_>>();
+
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
+
+                let tx_kind = client
+                    .transaction_builder()
+                    .move_call_tx_kind(package, &module, &function, type_args, args)
+                    .await?;
+
+                let sender = processing
+                    .sender
+                    .unwrap_or(context.infer_sender(&payment.gas).await?);
+                let gas_payment = client
+                    .transaction_builder()
+                    .input_refs(&payment.gas)
+                    .await?;
+
+                dry_run_or_execute_or_serialize(
+                    sender,
+                    tx_kind,
+                    context,
+                    gas_payment,
+                    gas_data,
+                    processing,
+                )
+                .await?
+            }
+
+            HaneulClientCommands::Transfer {
+                to,
+                object_id,
+                payment,
+                gas_data,
+                processing,
+            } => {
+                let signer = context.get_object_owner(&object_id).await?;
+                let to = context.get_identity_address(Some(to))?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
+
+                let tx_kind = client
+                    .transaction_builder()
+                    .transfer_object_tx_kind(object_id, to)
+                    .await?;
+
+                let gas_payment = client
+                    .transaction_builder()
+                    .input_refs(&payment.gas)
+                    .await?;
+
+                dry_run_or_execute_or_serialize(
+                    signer,
+                    tx_kind,
+                    context,
+                    gas_payment,
+                    gas_data,
+                    processing,
+                )
+                .await?
+            }
+
+            HaneulClientCommands::TransferHaneul {
+                to,
+                haneul_coin_object_id: object_id,
+                amount,
+                gas_data,
+                processing,
+            } => {
+                let signer = context.get_object_owner(&object_id).await?;
+                let to = context.get_identity_address(Some(to))?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
+
+                let tx_kind = client
+                    .transaction_builder()
+                    .transfer_haneul_tx_kind(to, amount);
+
+                let gas_payment = client
+                    .transaction_builder()
+                    .input_refs(&[object_id])
+                    .await?;
+
+                dry_run_or_execute_or_serialize(
+                    signer,
+                    tx_kind,
+                    context,
+                    gas_payment,
+                    gas_data,
+                    processing,
+                )
+                .await?
+            }
+
+            HaneulClientCommands::Pay {
+                input_coins,
+                recipients,
+                amounts,
+                payment,
+                gas_data,
+                processing,
+            } => {
+                ensure!(
+                    !input_coins.is_empty(),
+                    "Pay transaction requires a non-empty list of input coins"
+                );
+                ensure!(
+                    !recipients.is_empty(),
+                    "Pay transaction requires a non-empty list of recipient addresses"
+                );
+                ensure!(
+                    recipients.len() == amounts.len(),
+                    format!(
+                        "Found {:?} recipient addresses, but {:?} recipient amounts",
+                        recipients.len(),
+                        amounts.len()
+                    ),
+                );
+                let recipients = recipients
+                    .into_iter()
+                    .map(|x| context.get_identity_address(Some(x)))
+                    .collect::<Result<Vec<HaneulAddress>, anyhow::Error>>()
+                    .map_err(|e| anyhow!("{e}"))?;
+                let signer = context.get_object_owner(&input_coins[0]).await?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
+                let tx_kind = client
+                    .transaction_builder()
+                    .pay_tx_kind(input_coins.clone(), recipients.clone(), amounts.clone())
+                    .await?;
+
+                ensure!(
+                    !payment.gas.iter().any(|gas| input_coins.contains(gas)),
+                    "Gas coin is in input coins of Pay transaction, use PayHaneul transaction instead!"
+                );
+
+                let gas_payment = client
+                    .transaction_builder()
+                    .input_refs(&payment.gas)
+                    .await?;
+
+                dry_run_or_execute_or_serialize(
+                    signer,
+                    tx_kind,
+                    context,
+                    gas_payment,
+                    gas_data,
+                    processing,
+                )
+                .await?
+            }
+
+            HaneulClientCommands::PayHaneul {
+                input_coins,
+                recipients,
+                amounts,
+                gas_data,
+                processing,
+            } => {
+                ensure!(
+                    !input_coins.is_empty(),
+                    "PayHaneul transaction requires a non-empty list of input coins"
+                );
+                ensure!(
+                    !recipients.is_empty(),
+                    "PayHaneul transaction requires a non-empty list of recipient addresses"
+                );
+                ensure!(
+                    recipients.len() == amounts.len(),
+                    format!(
+                        "Found {:?} recipient addresses, but {:?} recipient amounts",
+                        recipients.len(),
+                        amounts.len()
+                    ),
+                );
+                let recipients = recipients
+                    .into_iter()
+                    .map(|x| context.get_identity_address(Some(x)))
+                    .collect::<Result<Vec<HaneulAddress>, anyhow::Error>>()
+                    .map_err(|e| anyhow!("{e}"))?;
+                let signer = context.get_object_owner(&input_coins[0]).await?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
+
+                let tx_kind = client
+                    .transaction_builder()
+                    .pay_haneul_tx_kind(recipients, amounts)?;
+
+                let gas_payment = client
+                    .transaction_builder()
+                    .input_refs(&input_coins)
+                    .await?;
+
+                dry_run_or_execute_or_serialize(
+                    signer,
+                    tx_kind,
+                    context,
+                    gas_payment,
+                    gas_data,
+                    processing,
+                )
+                .await?
+            }
+
+            HaneulClientCommands::PayAllHaneul {
+                input_coins,
+                recipient,
+                gas_data,
+                processing,
+            } => {
+                ensure!(
+                    !input_coins.is_empty(),
+                    "PayAllHaneul transaction requires a non-empty list of input coins"
+                );
+                let recipient = context.get_identity_address(Some(recipient))?;
+                let signer = context.get_object_owner(&input_coins[0]).await?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
+
+                let tx_kind = client.transaction_builder().pay_all_haneul_tx_kind(recipient);
+                let gas_payment = client
+                    .transaction_builder()
+                    .input_refs(&input_coins)
+                    .await?;
+
+                dry_run_or_execute_or_serialize(
+                    signer,
+                    tx_kind,
+                    context,
+                    gas_payment,
+                    gas_data,
+                    processing,
+                )
+                .await?
+            }
+
+            HaneulClientCommands::Objects { address } => {
+                let address = context.get_identity_address(address)?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
+                let objects = client
+                    .list_owned_objects(address, None)
+                    .try_collect()
+                    .await?;
+                HaneulClientCommandResult::Objects(objects)
+            }
+
+            HaneulClientCommands::NewAddress {
+                key_scheme,
+                alias,
+                derivation_path,
+                word_length,
+            } => {
+                let (address, keypair, scheme, phrase) =
+                    key_derive::generate_new_key(key_scheme, derivation_path, word_length)
+                        .map_err(|e| anyhow!("Failed to generate new key: {}", e))?;
+                context
+                    .config
+                    .keystore
+                    .import(alias.clone(), keypair)
+                    .await?;
+
+                let alias = match alias {
+                    Some(x) => x,
+                    None => context.config.keystore.get_alias(&address)?,
+                };
+
+                HaneulClientCommandResult::NewAddress(NewAddressOutput {
+                    alias,
+                    address,
+                    key_scheme: scheme,
+                    recovery_phrase: phrase,
+                })
+            }
+
+            HaneulClientCommands::RemoveAddress { alias_or_address } => {
+                let identity = KeyIdentity::from_str(&alias_or_address)
+                    .map_err(|e| anyhow!("Invalid address or alias: {}", e))?;
+                let address: HaneulAddress = context.config.keystore.get_by_identity(&identity)?;
+
+                context.config.keystore.remove(address).await?;
+
+                HaneulClientCommandResult::RemoveAddress(RemoveAddressOutput { alias_or_address })
+            }
+
+            HaneulClientCommands::Gas { address } => {
+                let address = context.get_identity_address(address)?;
+                let coins = context
+                    .gas_objects(address)
+                    .await?
+                    .iter()
+                    // Ok to unwrap() since `get_gas_objects` guarantees gas
+                    .map(|(_val, object)| GasCoin::try_from(object).unwrap())
+                    .collect();
+                let _ = context.cache_chain_id().await?;
+                HaneulClientCommandResult::Gas(coins)
+            }
+            HaneulClientCommands::Faucet { address, url } => {
+                let address = context.get_identity_address(address)?;
+                let url = if let Some(url) = url {
+                    ensure!(
+                        !url.starts_with("https://faucet.testnet.haneul.io"),
+                        "For testnet tokens, please use the Web UI: https://faucet.haneul.io/?address={address}"
+                    );
+                    url
+                } else {
+                    let active_env = context.get_active_env();
+                    if let Ok(env) = active_env {
+                        find_faucet_url(address, &env.rpc)?
+                    } else {
+                        bail!("No URL for faucet was provided and there is no active network.")
+                    }
+                };
+                request_tokens_from_faucet(address, url).await?;
+                let _ = context.cache_chain_id().await?;
+                HaneulClientCommandResult::NoOutput
+            }
+            HaneulClientCommands::ChainIdentifier => {
+                let ci = context.cache_chain_id().await?;
+                HaneulClientCommandResult::ChainIdentifier(ci)
+            }
+            HaneulClientCommands::SplitCoin {
+                coin_id,
+                amounts,
+                count,
+                payment,
+                gas_data,
+                processing,
+            } => {
+                match (amounts.as_ref(), count) {
+                    (None, None) => bail!("You must use one of amounts or count options."),
+                    (Some(_), Some(_)) => bail!("Cannot specify both amounts and count."),
+                    (None, Some(0)) => bail!("Coin split count must be greater than 0"),
+                    _ => { /*no_op*/ }
+                }
+
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
+                let signer = context.get_object_owner(&coin_id).await?;
+
+                let tx_kind = client
+                    .transaction_builder()
+                    .split_coin_tx_kind(coin_id, amounts, count)
+                    .await?;
+
+                let gas_payment = client
+                    .transaction_builder()
+                    .input_refs(&payment.gas)
+                    .await?;
+
+                dry_run_or_execute_or_serialize(
+                    signer,
+                    tx_kind,
+                    context,
+                    gas_payment,
+                    gas_data,
+                    processing,
+                )
+                .await?
+            }
+            HaneulClientCommands::MergeCoin {
+                primary_coin,
+                coin_to_merge,
+                payment,
+                gas_data,
+                processing,
+            } => {
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
+                let signer = context.get_object_owner(&primary_coin).await?;
+
+                let tx_kind = client
+                    .transaction_builder()
+                    .merge_coins_tx_kind(primary_coin, coin_to_merge)
+                    .await?;
+
+                let gas_payment = client
+                    .transaction_builder()
+                    .input_refs(&payment.gas)
+                    .await?;
+
+                dry_run_or_execute_or_serialize(
+                    signer,
+                    tx_kind,
+                    context,
+                    gas_payment,
+                    gas_data,
+                    processing,
+                )
+                .await?
+            }
+            HaneulClientCommands::SerializedTx {
+                tx_bytes,
+                processing,
+            } => {
+                let Ok(bytes) = Base64::decode(&tx_bytes) else {
+                    bail!("Invalid Base64 encoding");
+                };
+
+                let Ok(tx_data): Result<TransactionData, _> = bcs::from_bytes(&bytes) else {
+                    bail!("Failed to parse --tx-bytes as TransactionData");
+                };
+
+                let sender = tx_data.sender();
+                let gas_payment = tx_data.gas().to_owned();
+                let gas_data = GasDataArgs {
+                    gas_budget: Some(tx_data.gas_budget()),
+                    gas_price: Some(tx_data.gas_price()),
+                    gas_sponsor: Some(tx_data.gas_owner()),
+                };
+                let tx_kind = tx_data.into_kind();
+
+                dry_run_or_execute_or_serialize(
+                    sender,
+                    tx_kind,
+                    context,
+                    gas_payment,
+                    gas_data,
+                    processing,
+                )
+                .await?
+            }
+            HaneulClientCommands::SerializedTxKind {
+                tx_bytes,
+                payment,
+                gas_data,
+                processing,
+            } => {
+                let Ok(bytes) = Base64::decode(&tx_bytes) else {
+                    bail!("Invalid Base64 encoding");
+                };
+
+                let Ok(tx_kind): Result<TransactionKind, _> = bcs::from_bytes(&bytes) else {
+                    bail!("Failed to parse --tx-bytes as TransactionKind");
+                };
+
+                let client = context.grpc_client()?;
+                let sender = processing
+                    .sender
+                    .unwrap_or(context.infer_sender(&payment.gas).await?);
+                let gas_payment = client
+                    .transaction_builder()
+                    .input_refs(&payment.gas)
+                    .await?;
+
+                dry_run_or_execute_or_serialize(
+                    sender,
+                    tx_kind,
+                    context,
+                    gas_payment,
+                    gas_data,
+                    processing,
+                )
+                .await?
+            }
+            HaneulClientCommands::Switch { address, env } => {
+                let mut addr = None;
+
+                if address.is_none() && env.is_none() {
+                    return Err(anyhow!(
+                        "No address, an alias, or env specified. Please specify one."
+                    ));
+                }
+
+                if let Some(address) = address {
+                    let address = context.get_identity_address(Some(address))?;
+                    if !context.get_addresses().contains(&address) {
+                        return Err(anyhow!("Address {} not managed by wallet", address));
+                    }
+                    context.config.active_address = Some(address);
+                    addr = Some(address.to_string());
+                }
+
+                if let Some(ref env) = env {
+                    Self::switch_env(&mut context.config, env)?;
+                }
+                context.config.save()?;
+                HaneulClientCommandResult::Switch(SwitchResponse { address: addr, env })
+            }
+            HaneulClientCommands::ActiveAddress => {
+                HaneulClientCommandResult::ActiveAddress(context.active_address().ok())
+            }
+
+            HaneulClientCommands::ExecuteSignedTx {
+                tx_bytes,
+                signatures,
+            } => {
+                let data = bcs::from_bytes(
+                    &Base64::try_from(tx_bytes)
+                    .map_err(|_| anyhow!("Invalid Base64 encoding"))?
+                    .to_vec()
+                    .map_err(|_| anyhow!("Invalid Base64 encoding"))?
+                ).map_err(|_| anyhow!("Failed to parse tx bytes, check if it matches the output of haneul client commands with --serialize-unsigned-transaction"))?;
+
+                let mut sigs = Vec::new();
+                for sig in signatures {
+                    sigs.push(
+                        GenericSignature::from_bytes(
+                            &Base64::try_from(sig)
+                                .map_err(|_| anyhow!("Invalid Base64 encoding"))?
+                                .to_vec()
+                                .map_err(|e| anyhow!(e))?,
+                        )
+                        .map_err(|_| anyhow!("Invalid generic signature"))?,
+                    );
+                }
+                let transaction = Transaction::from_generic_sig_data(data, sigs);
+
+                let response = context.execute_transaction_may_fail(transaction).await?;
+                HaneulClientCommandResult::TransactionBlock(response)
+            }
+            HaneulClientCommands::ExecuteCombinedSignedTx { signed_tx_bytes } => {
+                let data: SenderSignedData = bcs::from_bytes(
+                    &Base64::try_from(signed_tx_bytes)
+                        .map_err(|_| anyhow!("Invalid Base64 encoding"))?
+                        .to_vec()
+                        .map_err(|_| anyhow!("Invalid Base64 encoding"))?
+                ).map_err(|_| anyhow!("Failed to parse SenderSignedData bytes, check if it matches the output of haneul client commands with --serialize-signed-transaction"))?;
+                let transaction = Envelope::<SenderSignedData, EmptySignInfo>::new(data);
+                let response = context.execute_transaction_may_fail(transaction).await?;
+                HaneulClientCommandResult::TransactionBlock(response)
+            }
+            HaneulClientCommands::NewEnv {
+                alias,
+                rpc,
+                ws,
+                basic_auth,
+            } => {
+                if context.config.envs.iter().any(|env| env.alias == alias) {
+                    return Err(anyhow!(
+                        "Environment config with name [{alias}] already exists."
+                    ));
+                }
+                let mut env = HaneulEnv {
+                    alias,
+                    rpc,
+                    ws,
+                    basic_auth,
+                    chain_id: None,
+                };
+
+                // Check urls are valid and server is reachable
+                let _ = env.create_grpc_client()?.get_latest_checkpoint().await?;
+                context.config.envs.push(env.clone());
+                context.config.save()?;
+                let chain_id = context.cache_chain_id().await?;
+                env.chain_id = Some(chain_id);
+                HaneulClientCommandResult::NewEnv(env)
+            }
+            HaneulClientCommands::ActiveEnv => HaneulClientCommandResult::ActiveEnv(
+                context.get_active_env().ok().map(|e| e.alias.clone()),
+            ),
+            HaneulClientCommands::Envs => HaneulClientCommandResult::Envs(
+                context.config.envs.clone(),
+                context.get_active_env().ok().map(|e| e.alias.clone()),
+            ),
+            HaneulClientCommands::VerifySource {
+                package_path,
+                build_config,
+                verify_deps,
+                skip_source,
+                address_override,
+            } => {
+                let mode = match (!skip_source, verify_deps, address_override) {
+                    (false, false, _) => {
+                        bail!("Source skipped and not verifying deps: Nothing to verify.")
+                    }
+
+                    (false, true, _) => ValidationMode::deps(),
+                    (true, false, None) => ValidationMode::root(),
+                    (true, true, None) => ValidationMode::root_and_deps(),
+                    (true, false, Some(at)) => ValidationMode::root_at(*at),
+                    (true, true, Some(at)) => ValidationMode::root_and_deps_at(*at),
+                };
+
+                let environment =
+                    find_environment(&package_path, build_config.environment.clone(), context)
+                        .await?;
+
+                let mut root_pkg =
+                    load_root_pkg_for_publish_upgrade(context, &build_config, &package_path)
+                        .await?;
+                let build_config = BuildConfig {
+                    config: build_config,
+                    run_bytecode_verifier: true,
+                    print_diags_to_stderr: true,
+                    environment: environment.clone(),
+                };
+                let compiled_package = build_config
+                    .build_async_from_root_pkg(&mut root_pkg)
+                    .await?;
+
+                let client = context.grpc_client()?;
+                BytecodeSourceVerifier::new(&client)
+                    .verify(&compiled_package, mode, &environment)
+                    .await?;
+
+                HaneulClientCommandResult::VerifySource
+            }
+            HaneulClientCommands::PartyTransfer {
+                to,
+                object_id,
+                payment,
+                gas_data,
+                processing,
+            } => {
+                let signer = context.get_object_owner(&object_id).await?;
+                let to = context.get_identity_address(Some(to))?;
+                let client = context.grpc_client()?;
+                let _ = context.cache_chain_id().await?;
+                let transaction_builder = client.transaction_builder();
+
+                let (full_obj_ref, object_type) = transaction_builder
+                    .get_full_object_ref_and_type(object_id)
+                    .await?;
+                let type_tag: TypeTag = match object_type {
+                    ObjectType::Struct(move_obj_type) => move_obj_type.into(),
+                    ObjectType::Package => return Err(anyhow!("Cannot transfer a package object")),
+                };
+
+                let mut builder = ProgrammableTransactionBuilder::new();
+                let object_input = builder.obj(match full_obj_ref.0 {
+                    FullObjectID::Fastpath(_) => {
+                        ObjectArg::ImmOrOwnedObject(full_obj_ref.as_object_ref())
+                    }
+                    FullObjectID::Consensus((id, initial_shared_version)) => {
+                        ObjectArg::SharedObject {
+                            id,
+                            initial_shared_version,
+                            mutability: SharedObjectMutability::Mutable,
+                        }
+                    }
+                })?;
+
+                let to_arg = builder.pure(to)?;
+                let party_result = builder.programmable_move_call(
+                    HANEUL_FRAMEWORK_PACKAGE_ID,
+                    Identifier::from_str("party")?,
+                    Identifier::from_str("single_owner")?,
+                    vec![],
+                    vec![to_arg],
+                );
+
+                builder.programmable_move_call(
+                    HANEUL_FRAMEWORK_PACKAGE_ID,
+                    Identifier::from_str("transfer")?,
+                    Identifier::from_str("public_party_transfer")?,
+                    vec![type_tag],
+                    vec![object_input, party_result],
+                );
+
+                let tx_kind = TransactionKind::programmable(builder.finish());
+
+                let gas_payment = transaction_builder.input_refs(&payment.gas).await?;
+
+                dry_run_or_execute_or_serialize(
+                    signer,
+                    tx_kind,
+                    context,
+                    gas_payment,
+                    gas_data,
+                    processing,
+                )
+                .await?
+            }
+            HaneulClientCommands::PTB(ptb) => {
+                let _ = context.cache_chain_id().await?;
+                ptb.execute(context).await?;
+                HaneulClientCommandResult::NoOutput
+            }
+        };
+        Ok(ret)
+    }
+
+    pub fn switch_env(config: &mut HaneulClientConfig, env: &str) -> Result<(), anyhow::Error> {
+        let env = Some(env.into());
+        ensure!(
+            config.get_env(&env).is_some(),
+            "Environment config not found for [{env:?}], add new environment config using the `haneul client new-env` command."
+        );
+        config.active_env = env;
+        Ok(())
+    }
+}
+
+/// Process the `--skip-dependency-verification` and `--verify-dependencies` flags for a publish or
+/// upgrade command. Prints deprecation warnings as appropriate and returns true if the
+/// dependencies should be verified
+fn check_dep_verification_flags(
+    skip_dependency_verification: bool,
+    verify_dependencies: bool,
+) -> anyhow::Result<bool> {
+    match (skip_dependency_verification, verify_dependencies) {
+        (true, true) => bail!(
+            "[error]: --skip-dependency-verification and --verify-deps are mutually exclusive"
+        ),
+
+        (false, false) => {
+            eprintln!(
+                "{}: Dependency sources are no longer verified automatically during publication and upgrade. \
+                You can pass the `--verify-deps` option if you would like to verify them as part of publication or upgrade.",
+                "[Note]".bold().yellow()
+            );
+            Ok(verify_dependencies)
+        }
+
+        (true, false) => {
+            eprintln!(
+                "{}: Dependency sources are no longer verified automatically during publication and upgrade, \
+                so the `--skip-dependency-verification` flag is no longer necessary.",
+                "[Warning]".bold().yellow()
+            );
+            Ok(verify_dependencies)
+        }
+
+        (false, true) => Ok(verify_dependencies),
+    }
+}
+
+async fn compile_package_simple(
+    _client: Client,
+    _build_config: MoveBuildConfig,
+    _package_path: &Path,
+    _chain_id: Option<String>,
+) -> Result<CompiledPackage, anyhow::Error> {
+    // build_config.implicit_dependencies = implicit_deps(latest_system_packages());
+    // let config = BuildConfig {
+    //     config: resolve_lock_file_path(build_config, Some(package_path))?,
+    //     run_bytecode_verifier: false,
+    //     print_diags_to_stderr: false,
+    //     chain_id: chain_id.clone(),
+    // };
+    // let resolution_graph = config.resolution_graph(package_path, chain_id.clone())?;
+    // let mut compiled_package =
+    //     build_from_resolution_graph(resolution_graph, false, false, chain_id)?;
+    // pkg_tree_shake(read_api, false, &mut compiled_package).await?;
+    todo!()
+    // Ok(compiled_package)
+}
+
+pub(crate) async fn upgrade_package(
+    mut client: Client,
+    root_pkg: &RootPackage<HaneulFlavor>,
+    build_config: MoveBuildConfig,
+    package_path: &Path,
+    upgrade_capability: ObjectID,
+    with_unpublished_dependencies: bool,
+    _skip_dependency_verification: bool,
+) -> Result<(u8, CompiledPackage), anyhow::Error> {
+    let compiled_package = compile_package(
+        client.clone(),
+        root_pkg,
+        build_config.clone(),
+        package_path,
+        with_unpublished_dependencies,
+    )
+    .await?;
+
+    let object = client.get_object(upgrade_capability).await?;
+
+    let upgrade_cap: UpgradeCap = bcs::from_bytes(
+        object
+            .data
+            .try_as_move()
+            .ok_or_else(|| anyhow!("Upgrade capability is not a Move Object"))?
+            .contents(),
+    )?;
+    // We keep the existing policy -- no fancy policies or changing the upgrade
+    // policy at the moment. To change the policy you can call a Move function in the
+    // `package` module to change this policy.
+    let upgrade_policy = upgrade_cap.policy;
+
+    Ok((upgrade_policy, compiled_package))
+}
+
+pub(crate) async fn compile_package(
+    client: Client,
+    root_pkg: &RootPackage<HaneulFlavor>,
+    mut build_config: MoveBuildConfig,
+    package_path: &Path,
+    with_unpublished_deps: bool,
+) -> Result<CompiledPackage, anyhow::Error> {
+    let dependency_ids = check_for_unpublished_deps(root_pkg, with_unpublished_deps)?;
+
+    let chain_id = client.get_chain_identifier().await?.to_string();
+    debug!("Current client has {chain_id} as chain identifier");
+
+    debug!("Loaded package from {:?}", package_path.display());
+
+    // This will direct the pkg-system to set all unpublished dependencies to address 0x0
+    build_config.set_unpublished_deps_to_zero = with_unpublished_deps;
+
+    let package = move_package_alt_compilation::compile_from_root_package::<
+        std::io::Stderr,
+        HaneulFlavor,
+    >(root_pkg, &build_config, &mut std::io::stderr())
+    .unwrap();
+
+    let published_at = root_pkg
+        .publication()
+        .map(|p| ObjectID::from_address(p.addresses.published_at.0));
+
+    let mut compiled_package = CompiledPackage {
+        package,
+        dependency_ids,
+        published_at,
+    };
+
+    if compiled_package
+        .get_package_bytes(with_unpublished_deps)
+        .is_empty()
+    {
+        return Err(HaneulErrorKind::ModulePublishFailure {
+            error: "No modules found in the package".to_string(),
+        }
+        .into());
+    }
+
+    compatibility_checks(client.clone(), &compiled_package).await?;
+
+    pkg_tree_shake(client, with_unpublished_deps, &mut compiled_package).await?;
+
+    // TODO: pluck back in
+    // if with_unpublished_dependencies {
+    //     compiled_package.verify_unpublished_dependencies(&dependencies.unpublished)?;
+    // }
+
+    Ok(compiled_package)
+}
+
+/// Check for unpublished dependencies and error if any are found when the
+/// `--with-unpublished-dependencies` is not set.
+pub(crate) fn check_for_unpublished_deps(
+    root_pkg: &RootPackage<HaneulFlavor>,
+    with_unpublished_deps: bool,
+) -> anyhow::Result<PackageDependencies> {
+    let package_dependencies = PackageDependencies::new(root_pkg)?;
+    if !package_dependencies.unpublished.is_empty() && !with_unpublished_deps {
+        bail!(
+            "The package has unpublished dependencies. If you want to publish with unpublished \
+        dependencies, please publish them one by one, or (not recommended) pass the \
+        `--with-unpublished-dependencies` flag.\n Unpublished dependencies: {}
+        ",
+            package_dependencies
+                .unpublished
+                .into_iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+
+    Ok(package_dependencies)
+}
+
+async fn compatibility_checks(
+    client: Client,
+    compiled_package: &CompiledPackage,
+) -> Result<(), anyhow::Error> {
+    let protocol_config = client.get_protocol_config(None).await?;
+
+    // Check that the package's Move version is compatible with the chain's
+    if let Some(min_version) = protocol_config
+        .attributes()
+        .get("min_move_binary_format_version")
+        .and_then(|s| s.parse::<u32>().ok())
+    {
+        for module in compiled_package.get_modules_and_deps() {
+            if module.version() < min_version {
+                return Err(HaneulErrorKind::ModulePublishFailure {
+                    error: format!(
+                        "Module {} has a version {} that is \
+                     lower than the minimum version {min_version} supported by the chain.",
+                        module.self_id(),
+                        module.version(),
+                    ),
+                }
+                .into());
+            }
+        }
+    }
+
+    // Check that the package's Move version is compatible with the chain's
+    if let Some(max_version) = protocol_config
+        .attributes()
+        .get("move_binary_format_version")
+        .and_then(|s| s.parse::<u32>().ok())
+    {
+        for module in compiled_package.get_modules_and_deps() {
+            if module.version() > max_version {
+                let help_msg = if module.version() == 7 {
+                    "This is because you used enums in your Move package but tried to publish it to \
+                a chain that does not yet support enums in Move."
+                } else {
+                    ""
+                };
+                return Err(HaneulErrorKind::ModulePublishFailure {
+                    error: format!(
+                        "Module {} has a version {} that is \
+                         higher than the maximum version {max_version} supported by the chain.{help_msg}",
+                        module.self_id(),
+                        module.version(),
+                    ),
+                }
+                .into());
+            }
+        }
+    }
+
+    if !compiled_package.is_system_package() && compiled_package.published_root_module().is_some() {
+        return Err(HaneulErrorKind::ModulePublishFailure {
+            error: "Your package is already published. You have to manually remove the publication entry to publish again.\n \
+            - If you are doing a regular publish, you can remove the entry for your environment from `Published.toml`.\n \
+            - If you are doing a test publish, you can either specify a new file with `--pubfile-path`, \
+            or remove the entry from your existing ephemeral publication file.".to_string(),
+        }
+        .into());
+    }
+
+    Ok(())
+}
+
+impl Display for HaneulClientCommandResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut writer = String::new();
+        match self {
+            HaneulClientCommandResult::Addresses(addresses) => {
+                let mut builder = TableBuilder::default();
+                builder.set_header(vec!["alias", "address", "active address"]);
+                for (alias, address) in &addresses.addresses {
+                    let active_address = if address == &addresses.active_address {
+                        "*".to_string()
+                    } else {
+                        "".to_string()
+                    };
+                    builder.push_record([alias.to_string(), address.to_string(), active_address]);
+                }
+                let mut table = builder.build();
+                let style = TableStyle::rounded();
+                table.with(style);
+                write!(f, "{}", table)?
+            }
+            HaneulClientCommandResult::Balance(coins, with_coins) => {
+                if coins.is_empty() {
+                    return write!(f, "No coins found for this address.");
+                }
+                let mut builder = TableBuilder::default();
+                pretty_print_balance(coins, &mut builder, *with_coins);
+                let mut table = builder.build();
+                table.with(TablePanel::header("Balance of coins owned by this address"));
+                table.with(TableStyle::rounded().horizontals([HorizontalLine::new(
+                    1,
+                    TableStyle::modern().get_horizontal(),
+                )]));
+                table.with(tabled::settings::style::BorderSpanCorrection);
+                write!(f, "{}", table)?;
+            }
+            HaneulClientCommandResult::DynamicFieldQuery(df_refs) => {
+                let json_obj = json!(df_refs);
+                let mut table = json_to_table(&json_obj);
+                let style = TableStyle::rounded().horizontals([]);
+                table.with(style);
+                write!(f, "{}", table)?
+            }
+            HaneulClientCommandResult::Gas(gas_coins) => {
+                let gas_coins = gas_coins
+                    .iter()
+                    .map(GasCoinOutput::from)
+                    .collect::<Vec<_>>();
+                if gas_coins.is_empty() {
+                    write!(f, "No gas coins are owned by this address")?;
+                    return Ok(());
+                }
+
+                let mut builder = TableBuilder::default();
+                builder.set_header(vec!["gasCoinId", "geunhwaBalance (GEUNHWA)", "haneulBalance (HANEUL)"]);
+                for coin in &gas_coins {
+                    builder.push_record(vec![
+                        coin.gas_coin_id.to_string(),
+                        coin.geunhwa_balance.to_string(),
+                        coin.haneul_balance.to_string(),
+                    ]);
+                }
+                let mut table = builder.build();
+                table.with(TableStyle::rounded());
+                if gas_coins.len() > 10 {
+                    table.with(TablePanel::header(format!(
+                        "Showing {} gas coins and their balances.",
+                        gas_coins.len()
+                    )));
+                    table.with(TablePanel::footer(format!(
+                        "Showing {} gas coins and their balances.",
+                        gas_coins.len()
+                    )));
+                    table.with(TableStyle::rounded().horizontals([
+                        HorizontalLine::new(1, TableStyle::modern().get_horizontal()),
+                        HorizontalLine::new(2, TableStyle::modern().get_horizontal()),
+                        HorizontalLine::new(
+                            gas_coins.len() + 2,
+                            TableStyle::modern().get_horizontal(),
+                        ),
+                    ]));
+                    table.with(tabled::settings::style::BorderSpanCorrection);
+                }
+                write!(f, "{}", table)?;
+            }
+            HaneulClientCommandResult::NewAddress(new_address) => {
+                let mut builder = TableBuilder::default();
+                builder.push_record(vec!["alias", new_address.alias.as_str()]);
+                builder.push_record(vec!["address", new_address.address.to_string().as_str()]);
+                builder.push_record(vec![
+                    "keyScheme",
+                    new_address.key_scheme.to_string().as_str(),
+                ]);
+                builder.push_record(vec![
+                    "recoveryPhrase",
+                    new_address.recovery_phrase.to_string().as_str(),
+                ]);
+
+                let mut table = builder.build();
+                table.with(TableStyle::rounded());
+                table.with(TablePanel::header(
+                    "Created new keypair and saved it to keystore.",
+                ));
+
+                table.with(
+                    TableModify::new(TableCell::new(0, 0))
+                        .with(TableBorder::default().corner_bottom_right('┬')),
+                );
+                table.with(
+                    TableModify::new(TableCell::new(0, 0))
+                        .with(TableBorder::default().corner_top_right('─')),
+                );
+
+                write!(f, "{}", table)?
+            }
+            HaneulClientCommandResult::RemoveAddress(remove_address) => {
+                let mut builder = TableBuilder::default();
+                builder.push_record(vec![remove_address.alias_or_address.as_str()]);
+
+                let mut table = builder.build();
+                table.with(TableStyle::rounded());
+                table.with(TablePanel::header("removed the keypair from keystore."));
+
+                table.with(
+                    TableModify::new(TableCell::new(0, 0))
+                        .with(TableBorder::default().corner_bottom_right('┬')),
+                );
+                table.with(
+                    TableModify::new(TableCell::new(0, 0))
+                        .with(TableBorder::default().corner_top_right('─')),
+                );
+
+                write!(f, "{}", table)?
+            }
+            HaneulClientCommandResult::Object(object) => {
+                let object = ObjectOutput::from(object);
+                let json_obj = json!(&object);
+                let mut table = json_to_table(&json_obj);
+                table.with(TableStyle::rounded().horizontals([]));
+                writeln!(f, "{}", table)?;
+            }
+            HaneulClientCommandResult::Objects(objects) => {
+                if objects.is_empty() {
+                    writeln!(f, "This address has no owned objects.")?
+                } else {
+                    let objects = ObjectsOutput::from_vec(objects);
+                    let json_obj = json!(objects);
+                    let mut table = json_to_table(&json_obj);
+                    table.with(TableStyle::rounded().horizontals([]));
+                    writeln!(f, "{}", table)?
+                }
+            }
+            HaneulClientCommandResult::TransactionBlock(response) => {
+                write!(writer, "{}", to_legacy_transaction_block_response(response))?;
+            }
+            HaneulClientCommandResult::RawObject(o) => match o.to_bcs_base64() {
+                Ok(b64) => writeln!(writer, "{b64}")?,
+                Err(e) => writeln!(writer, "{e}")?,
+            },
+            HaneulClientCommandResult::ComputeTransactionDigest(tx_data) => {
+                writeln!(writer, "{}", tx_data.digest())?;
+            }
+            HaneulClientCommandResult::SerializedUnsignedTransaction(tx_data) => {
+                writeln!(
+                    writer,
+                    "{}",
+                    fastcrypto::encoding::Base64::encode(bcs::to_bytes(tx_data).unwrap())
+                )?;
+            }
+            HaneulClientCommandResult::SerializedSignedTransaction(sender_signed_tx) => {
+                writeln!(
+                    writer,
+                    "{}",
+                    fastcrypto::encoding::Base64::encode(bcs::to_bytes(sender_signed_tx).unwrap())
+                )?;
+            }
+            HaneulClientCommandResult::SyncClientState => {
+                writeln!(writer, "Client state sync complete.")?;
+            }
+            HaneulClientCommandResult::ChainIdentifier(ci) => {
+                writeln!(writer, "{}", ci)?;
+            }
+            HaneulClientCommandResult::Switch(response) => {
+                write!(writer, "{}", response)?;
+            }
+            HaneulClientCommandResult::ActiveAddress(response) => {
+                match response {
+                    Some(r) => write!(writer, "{}", r)?,
+                    None => write!(writer, "None")?,
+                };
+            }
+            HaneulClientCommandResult::ActiveEnv(env) => {
+                write!(writer, "{}", env.as_deref().unwrap_or("None"))?;
+            }
+            HaneulClientCommandResult::NewEnv(env) => {
+                writeln!(writer, "Added new Haneul env [{}] to config.", env.alias)?;
+            }
+            HaneulClientCommandResult::Envs(envs, active) => {
+                let mut builder = TableBuilder::default();
+                builder.set_header(["alias", "url", "active"]);
+                for env in envs {
+                    builder.push_record(vec![env.alias.clone(), env.rpc.clone(), {
+                        if Some(env.alias.as_str()) == active.as_deref() {
+                            "*".to_string()
+                        } else {
+                            "".to_string()
+                        }
+                    }]);
+                }
+                let mut table = builder.build();
+                table.with(TableStyle::rounded());
+                write!(f, "{}", table)?
+            }
+            HaneulClientCommandResult::VerifySource => {
+                writeln!(writer, "Source verification succeeded!")?;
+            }
+            HaneulClientCommandResult::VerifyBytecodeMeter {
+                success,
+                max_package_ticks,
+                max_module_ticks,
+                max_function_ticks,
+                used_ticks,
+            } => {
+                let mut builder = TableBuilder::default();
+
+                /// Convert ticks to string, using commas as thousands separators
+                fn format_ticks(ticks: u128) -> String {
+                    let ticks = ticks.to_string();
+                    let mut formatted = String::with_capacity(ticks.len() + ticks.len() / 3);
+                    for (i, c) in ticks.chars().rev().enumerate() {
+                        if i != 0 && (i % 3 == 0) {
+                            formatted.push(',');
+                        }
+                        formatted.push(c);
+                    }
+                    formatted.chars().rev().collect()
+                }
+
+                // Build up the limits table
+                builder.push_record(vec!["Limits"]);
+                builder.push_record(vec![
+                    "packages".to_string(),
+                    max_package_ticks.map_or_else(|| "None".to_string(), format_ticks),
+                ]);
+                builder.push_record(vec![
+                    "  modules".to_string(),
+                    max_module_ticks.map_or_else(|| "None".to_string(), format_ticks),
+                ]);
+                builder.push_record(vec![
+                    "    functions".to_string(),
+                    max_function_ticks.map_or_else(|| "None".to_string(), format_ticks),
+                ]);
+
+                // Build up usage table
+                builder.push_record(vec!["Ticks Used"]);
+                let mut stack = vec![used_ticks];
+                while let Some(usage) = stack.pop() {
+                    let indent = match usage.scope {
+                        Scope::Transaction => 0,
+                        Scope::Package => 0,
+                        Scope::Module => 2,
+                        Scope::Function => 4,
+                    };
+
+                    builder.push_record(vec![
+                        format!("{:indent$}{}", "", usage.name),
+                        format_ticks(usage.ticks),
+                    ]);
+
+                    stack.extend(usage.children.iter().rev())
+                }
+
+                let mut table = builder.build();
+
+                let message = if *success {
+                    "Package will pass metering check!"
+                } else {
+                    "Package will NOT pass metering check!"
+                };
+
+                // Add overall header and footer message;
+                table.with(TablePanel::header(message));
+                table.with(TablePanel::footer(message));
+
+                // Set-up spans for headers
+                table.with(TableModify::new(TableRows::new(0..2)).with(TableSpan::column(2)));
+                table.with(TableModify::new(TableRows::single(5)).with(TableSpan::column(2)));
+
+                // Styling
+                table.with(TableStyle::rounded());
+                table.with(TableModify::new(TableCols::new(1..)).with(TableAlignment::right()));
+
+                // Separators before and after headers/footers
+                let hl = TableStyle::modern().get_horizontal();
+                let last = table.count_rows() - 1;
+                table.with(HorizontalLine::new(2, hl));
+                table.with(HorizontalLine::new(5, hl));
+                table.with(HorizontalLine::new(6, hl));
+                table.with(HorizontalLine::new(last, hl));
+
+                table.with(tabled::settings::style::BorderSpanCorrection);
+
+                writeln!(f, "{}", table)?;
+            }
+            HaneulClientCommandResult::NoOutput => {}
+            HaneulClientCommandResult::DryRun(response) => {
+                if let Some(legacy) = to_legacy_dry_run_transaction_block_response(response) {
+                    writeln!(f, "{}", Pretty(&legacy))?;
+                } else {
+                    writeln!(f, "{}", Pretty(response))?;
+                }
+            }
+            HaneulClientCommandResult::DevInspect(response) => {
+                writeln!(f, "{}", Pretty(response))?;
+            }
+        }
+        write!(f, "{}", writer.trim_end_matches('\n'))
+    }
+}
+
+struct NoopModuleCache;
+
+impl GetModule for NoopModuleCache {
+    type Error = ();
+    type Item = CompiledModule;
+
+    fn get_module_by_id(&self, _id: &ModuleId) -> Result<Option<Self::Item>, Self::Error> {
+        Ok(None)
+    }
+}
+
+fn extract_published_module_names(transaction: &TransactionData) -> Vec<String> {
+    let mut modules = Vec::new();
+    let commands = match transaction.kind() {
+        TransactionKind::ProgrammableTransaction(ptb)
+        | TransactionKind::ProgrammableSystemTransaction(ptb) => &ptb.commands,
+        _ => return modules,
+    };
+
+    for command in commands {
+        let module_bytes = match command {
+            Command::Publish(module_bytes, _) | Command::Upgrade(module_bytes, _, _, _) => {
+                module_bytes
+            }
+            _ => continue,
+        };
+        for bytes in module_bytes {
+            if let Ok(module) = CompiledModule::deserialize_with_defaults(bytes) {
+                modules.push(module.self_id().name().to_string());
+            }
+        }
+    }
+
+    modules.sort();
+    modules.dedup();
+    modules
+}
+
+fn parse_object_type_tag(object_type: &str) -> Option<StructTag> {
+    match parse_haneul_type_tag(object_type).ok()? {
+        TypeTag::Struct(struct_tag) => Some(*struct_tag),
+        _ => None,
+    }
+}
+
+fn to_legacy_object_changes(response: &ExecutedTransaction) -> Vec<RpcObjectChange> {
+    use proto::changed_object::{IdOperation, OutputObjectState};
+
+    let sender = response.transaction.sender();
+    let published_modules = extract_published_module_names(&response.transaction);
+    let wrapped = response
+        .effects
+        .wrapped()
+        .iter()
+        .map(|(object_id, version, _)| (*object_id, *version))
+        .collect::<BTreeSet<_>>();
+
+    response
+        .changed_objects
+        .iter()
+        .filter_map(|changed| {
+            let object_id = changed.object_id().parse().ok()?;
+            match changed.output_state() {
+                OutputObjectState::PackageWrite => Some(RpcObjectChange::Published {
+                    package_id: object_id,
+                    version: changed.output_version().into(),
+                    digest: changed.output_digest().parse().ok()?,
+                    modules: published_modules.clone(),
+                }),
+                OutputObjectState::ObjectWrite => {
+                    let object_type = parse_object_type_tag(changed.object_type())?;
+                    let owner = changed.output_owner_opt().and_then(|owner| {
+                        <haneul_sdk::haneul_sdk_types::Owner as TryFrom<&proto::Owner>>::try_from(owner)
+                            .ok()
+                            .map(Owner::from)
+                    })?;
+                    let version: SequenceNumber = changed.output_version().into();
+                    let digest = changed.output_digest().parse().ok()?;
+                    if changed.id_operation() == IdOperation::Created {
+                        Some(RpcObjectChange::Created {
+                            sender,
+                            owner,
+                            object_type,
+                            object_id,
+                            version,
+                            digest,
+                        })
+                    } else {
+                        Some(RpcObjectChange::Mutated {
+                            sender,
+                            owner,
+                            object_type,
+                            object_id,
+                            version,
+                            previous_version: changed
+                                .input_version_opt()
+                                .unwrap_or_default()
+                                .into(),
+                            digest,
+                        })
+                    }
+                }
+                OutputObjectState::DoesNotExist => {
+                    let object_type = parse_object_type_tag(changed.object_type())?;
+                    let version: SequenceNumber = changed.output_version().into();
+                    if wrapped.contains(&(object_id, version)) {
+                        Some(RpcObjectChange::Wrapped {
+                            sender,
+                            object_type,
+                            object_id,
+                            version,
+                        })
+                    } else {
+                        Some(RpcObjectChange::Deleted {
+                            sender,
+                            object_type,
+                            object_id,
+                            version,
+                        })
+                    }
+                }
+                OutputObjectState::Unknown | OutputObjectState::AccumulatorWrite => None,
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+fn to_legacy_balance_changes(response: &ExecutedTransaction) -> Vec<RpcBalanceChange> {
+    response
+        .balance_changes
+        .iter()
+        .filter_map(|balance_change| {
+            Some(RpcBalanceChange {
+                owner: Owner::AddressOwner(balance_change.address.into()),
+                coin_type: type_tag_sdk_to_core(balance_change.coin_type.clone()).ok()?,
+                amount: balance_change.amount,
+            })
+        })
+        .collect()
+}
+
+fn to_legacy_events(response: &ExecutedTransaction) -> Option<HaneulTransactionBlockEvents> {
+    let events = response.events.as_ref()?;
+    let digest = response.transaction.digest();
+    let timestamp_ms = response.timestamp_ms();
+    Some(HaneulTransactionBlockEvents {
+        data: events
+            .data
+            .iter()
+            .enumerate()
+            .map(|(event_seq, event)| HaneulEvent {
+                id: EventID {
+                    tx_digest: digest,
+                    event_seq: event_seq as u64,
+                },
+                package_id: event.package_id,
+                transaction_module: event.transaction_module.clone(),
+                sender: event.sender,
+                type_: event.type_.clone(),
+                parsed_json: response
+                    .event_json
+                    .get(event_seq)
+                    .cloned()
+                    .flatten()
+                    .unwrap_or_else(|| json!({})),
+                bcs: BcsEvent::new(event.contents.clone()),
+                timestamp_ms,
+            })
+            .collect(),
+    })
+}
+
+fn to_legacy_transaction(response: &ExecutedTransaction) -> Option<HaneulTransactionBlock> {
+    let signed_data =
+        SenderSignedData::new(response.transaction.clone(), response.signatures.clone());
+    HaneulTransactionBlock::try_from(signed_data, &NoopModuleCache).ok()
+}
+
+fn to_legacy_transaction_block_response(
+    response: &ExecutedTransaction,
+) -> HaneulTransactionBlockResponse {
+    let object_changes = to_legacy_object_changes(response);
+    let balance_changes = to_legacy_balance_changes(response);
+
+    let mut legacy_response = HaneulTransactionBlockResponse::new(response.transaction.digest());
+    legacy_response.transaction = to_legacy_transaction(response);
+    legacy_response.effects = HaneulTransactionBlockEffects::try_from(response.effects.clone()).ok();
+    legacy_response.events = to_legacy_events(response);
+    legacy_response.object_changes = (!object_changes.is_empty()).then_some(object_changes);
+    legacy_response.balance_changes = (!balance_changes.is_empty()).then_some(balance_changes);
+    legacy_response.timestamp_ms = response.timestamp_ms();
+    legacy_response.checkpoint = response.checkpoint;
+    legacy_response
+}
+
+fn to_legacy_dry_run_transaction_block_response(
+    response: &SimulateTransactionResponse,
+) -> Option<DryRunTransactionBlockResponse> {
+    let effects =
+        HaneulTransactionBlockEffects::try_from(response.transaction.effects.clone()).ok()?;
+    let input = to_legacy_transaction(&response.transaction)?.data;
+    let execution_error_source = match response.transaction.effects.status() {
+        ExecutionStatus::Failure { error, .. } => Some(format!("{error:?}")),
+        ExecutionStatus::Success => None,
+    };
+
+    Some(DryRunTransactionBlockResponse {
+        effects,
+        events: to_legacy_events(&response.transaction).unwrap_or_default(),
+        object_changes: to_legacy_object_changes(&response.transaction),
+        balance_changes: to_legacy_balance_changes(&response.transaction),
+        input,
+        execution_error_source,
+        suggested_gas_price: response.suggested_gas_price,
+    })
+}
+
+fn convert_number_to_string(value: Value) -> Value {
+    match value {
+        Value::Number(n) => Value::String(n.to_string()),
+        Value::Array(a) => Value::Array(a.into_iter().map(convert_number_to_string).collect()),
+        Value::Object(o) => Value::Object(
+            o.into_iter()
+                .map(|(k, v)| (k, convert_number_to_string(v)))
+                .collect(),
+        ),
+        _ => value,
+    }
+}
+
+impl Debug for HaneulClientCommandResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let s = unwrap_err_to_string(|| match self {
+            HaneulClientCommandResult::Gas(gas_coins) => {
+                let gas_coins = gas_coins
+                    .iter()
+                    .map(GasCoinOutput::from)
+                    .collect::<Vec<_>>();
+                Ok(serde_json::to_string_pretty(&gas_coins)?)
+            }
+            HaneulClientCommandResult::Object(object) => Ok(serde_json::to_string_pretty(&object)?),
+            HaneulClientCommandResult::RawObject(object) => Ok(serde_json::to_string_pretty(&object)?),
+            HaneulClientCommandResult::TransactionBlock(response) => Ok(serde_json::to_string_pretty(
+                &to_legacy_transaction_block_response(response),
+            )?),
+            HaneulClientCommandResult::DryRun(response) => {
+                if let Some(legacy) = to_legacy_dry_run_transaction_block_response(response) {
+                    Ok(serde_json::to_string_pretty(&legacy)?)
+                } else {
+                    Ok(serde_json::to_string_pretty(response)?)
+                }
+            }
+            _ => Ok(serde_json::to_string_pretty(self)?),
+        });
+        write!(f, "{}", s)
+    }
+}
+
+fn unwrap_err_to_string<T: Display, F: FnOnce() -> Result<T, anyhow::Error>>(func: F) -> String {
+    match func() {
+        Ok(s) => format!("{s}"),
+        Err(err) => format!("{err}").red().to_string(),
+    }
+}
+
+impl HaneulClientCommandResult {
+    pub fn objects_response(&self) -> Option<Vec<Object>> {
+        use HaneulClientCommandResult::*;
+        match self {
+            Object(o) | RawObject(o) => Some(vec![o.clone()]),
+            Objects(o) => Some(o.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn print(&self, pretty: bool) {
+        let line = if pretty {
+            format!("{self}")
+        } else {
+            format!("{:?}", self)
+        };
+        // Log line by line
+        for line in line.lines() {
+            // Logs write to a file on the side.  Print to stdout and also log to file, for tests to pass.
+            println!("{line}");
+            info!("{line}")
+        }
+    }
+
+    pub fn tx_block_response(&self) -> Option<&ExecutedTransaction> {
+        use HaneulClientCommandResult::*;
+        match self {
+            TransactionBlock(b) => Some(b),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddressesOutput {
+    pub active_address: HaneulAddress,
+    pub addresses: Vec<(String, HaneulAddress)>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewAddressOutput {
+    pub alias: String,
+    pub address: HaneulAddress,
+    pub key_scheme: SignatureScheme,
+    pub recovery_phrase: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveAddressOutput {
+    pub alias_or_address: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectOutput {
+    pub object_id: ObjectID,
+    pub version: SequenceNumber,
+    pub digest: String,
+    pub obj_type: String,
+    pub owner: Owner,
+    pub prev_tx: TransactionDigest,
+    pub storage_rebate: u64,
+    pub content: haneul_types::object::Data,
+}
+
+impl From<&Object> for ObjectOutput {
+    fn from(obj: &Object) -> Self {
+        let obj_type = if let Some(struct_tag) = obj.struct_tag() {
+            struct_tag.to_canonical_string(true)
+        } else {
+            "package".to_string()
+        };
+
+        Self {
+            object_id: obj.id(),
+            version: obj.version(),
+            digest: obj.digest().base58_encode(),
+            obj_type,
+            owner: obj.owner().clone(),
+            prev_tx: obj.previous_transaction,
+            storage_rebate: obj.storage_rebate,
+            content: obj.data.clone(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GasCoinOutput {
+    pub gas_coin_id: ObjectID,
+    pub geunhwa_balance: u64,
+    pub haneul_balance: String,
+}
+
+impl From<&GasCoin> for GasCoinOutput {
+    fn from(gas_coin: &GasCoin) -> Self {
+        Self {
+            gas_coin_id: *gas_coin.id(),
+            geunhwa_balance: gas_coin.value(),
+            haneul_balance: format_balance(gas_coin.value() as u128, 9, 2, None),
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectsOutput {
+    pub object_id: ObjectID,
+    pub version: SequenceNumber,
+    pub digest: String,
+    pub object_type: String,
+}
+
+impl ObjectsOutput {
+    fn from(obj: &Object) -> Self {
+        Self {
+            object_id: obj.id(),
+            version: obj.version(),
+            digest: obj.digest().base58_encode(),
+            object_type: if let Some(struct_tag) = obj.struct_tag() {
+                struct_tag.to_canonical_string(true)
+            } else {
+                "package".to_string()
+            },
+        }
+    }
+
+    fn from_vec(objs: &[Object]) -> Vec<Self> {
+        objs.iter().map(ObjectsOutput::from).collect()
+    }
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+#[allow(clippy::large_enum_variant)]
+pub enum HaneulClientCommandResult {
+    ActiveAddress(Option<HaneulAddress>),
+    ActiveEnv(Option<String>),
+    Addresses(AddressesOutput),
+    Balance(Vec<(Option<proto::GetCoinInfoResponse>, Vec<Coin>)>, bool),
+    ChainIdentifier(String),
+    ComputeTransactionDigest(TransactionData),
+    DynamicFieldQuery(proto::ListDynamicFieldsResponse),
+    DryRun(SimulateTransactionResponse),
+    DevInspect(SimulateTransactionResponse),
+    Envs(Vec<HaneulEnv>, Option<String>),
+    Gas(Vec<GasCoin>),
+    NewAddress(NewAddressOutput),
+    NewEnv(HaneulEnv),
+    NoOutput,
+    Object(Object),
+    Objects(Vec<Object>),
+    RawObject(Object),
+    RemoveAddress(RemoveAddressOutput),
+    SerializedSignedTransaction(SenderSignedData),
+    SerializedUnsignedTransaction(TransactionData),
+    Switch(SwitchResponse),
+    SyncClientState,
+    TransactionBlock(ExecutedTransaction),
+    VerifyBytecodeMeter {
+        success: bool,
+        max_package_ticks: Option<u128>,
+        max_module_ticks: Option<u128>,
+        max_function_ticks: Option<u128>,
+        used_ticks: Accumulator,
+    },
+    VerifySource,
+}
+
+#[derive(Serialize, Clone)]
+pub struct SwitchResponse {
+    /// Active address
+    pub address: Option<String>,
+    pub env: Option<String>,
+}
+
+impl Display for SwitchResponse {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut writer = String::new();
+
+        if let Some(addr) = &self.address {
+            writeln!(writer, "Active address switched to {addr}")?;
+        }
+        if let Some(env) = &self.env {
+            writeln!(writer, "Active environment switched to [{env}]")?;
+        }
+        write!(f, "{}", writer)
+    }
+}
+
+/// Request tokens from the Faucet for the given address
+pub async fn request_tokens_from_faucet(
+    address: HaneulAddress,
+    url: String,
+) -> Result<(), anyhow::Error> {
+    let address_str = address.to_string();
+    let json_body = json![{
+        "FixedAmountRequest": {
+            "recipient": &address_str
+        }
+    }];
+
+    // make the request to the faucet JSON RPC API for coin
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header(http::header::CONTENT_TYPE, "application/json")
+        .header(http::header::USER_AGENT, USER_AGENT)
+        .json(&json_body)
+        .send()
+        .await?;
+
+    match resp.status() {
+        StatusCode::ACCEPTED | StatusCode::CREATED | StatusCode::OK => {
+            let faucet_resp: FaucetResponse = resp.json().await?;
+
+            if let Some(err) = faucet_resp.error {
+                bail!("Faucet request was unsuccessful: {err}")
+            } else {
+                println!(
+                    "Request successful. It can take up to 1 minute to get the coin. Run haneul client gas to check your gas coins."
+                );
+            }
+        }
+        StatusCode::BAD_REQUEST => {
+            let faucet_resp: FaucetResponse = resp.json().await?;
+            if let Some(err) = faucet_resp.error {
+                bail!("Faucet request was unsuccessful. {err}");
+            }
+        }
+        StatusCode::TOO_MANY_REQUESTS => {
+            bail!(
+                "Faucet service received too many requests from this IP address. Please try again after 60 minutes."
+            );
+        }
+        StatusCode::SERVICE_UNAVAILABLE => {
+            bail!("Faucet service is currently overloaded or unavailable. Please try again later.");
+        }
+        status_code => {
+            bail!("Faucet request was unsuccessful: {status_code}");
+        }
+    }
+    Ok(())
+}
+
+fn pretty_print_balance(
+    coins_by_type: &Vec<(Option<proto::GetCoinInfoResponse>, Vec<Coin>)>,
+    builder: &mut TableBuilder,
+    with_coins: bool,
+) {
+    let format_decmials = 2;
+    let mut table_builder = TableBuilder::default();
+    if !with_coins {
+        table_builder.set_header(vec!["coin", "balance (raw)", "balance", ""]);
+    }
+    for (metadata, coins) in coins_by_type {
+        let (name, symbol, coin_decimals) = if let Some(metadata) = metadata {
+            (
+                metadata.metadata().name(),
+                metadata.metadata().symbol(),
+                metadata.metadata().decimals() as u8,
+            )
+        } else {
+            ("unknown", "unknown_symbol", 9)
+        };
+
+        let balance = coins.iter().map(|x| x.balance as u128).sum::<u128>();
+        let mut inner_table = TableBuilder::default();
+        inner_table.set_header(vec!["coinId", "balance (raw)", "balance", ""]);
+
+        if with_coins {
+            let coin_numbers = if coins.len() != 1 { "coins" } else { "coin" };
+            let balance_formatted = format!(
+                "({} {})",
+                format_balance(balance, coin_decimals, format_decmials, Some(symbol)),
+                symbol
+            );
+            let summary = format!(
+                "{}: {} {coin_numbers}, Balance: {} {}",
+                name,
+                coins.len(),
+                balance,
+                balance_formatted
+            );
+            for c in coins {
+                inner_table.push_record(vec![
+                    c.coin_object_id.to_string().as_str(),
+                    c.balance.to_string().as_str(),
+                    format_balance(
+                        c.balance as u128,
+                        coin_decimals,
+                        format_decmials,
+                        Some(symbol),
+                    )
+                    .as_str(),
+                ]);
+            }
+            let mut table = inner_table.build();
+            table.with(TablePanel::header(summary));
+            table.with(
+                TableStyle::rounded()
+                    .horizontals([
+                        HorizontalLine::new(1, TableStyle::modern().get_horizontal()),
+                        HorizontalLine::new(2, TableStyle::modern().get_horizontal()),
+                    ])
+                    .remove_vertical(),
+            );
+            table.with(tabled::settings::style::BorderSpanCorrection);
+            builder.push_record(vec![table.to_string()]);
+        } else {
+            table_builder.push_record(vec![
+                name,
+                balance.to_string().as_str(),
+                format_balance(balance, coin_decimals, format_decmials, Some(symbol)).as_str(),
+            ]);
+        }
+    }
+
+    let mut table = table_builder.build();
+    table.with(
+        TableStyle::rounded()
+            .horizontals([HorizontalLine::new(
+                1,
+                TableStyle::modern().get_horizontal(),
+            )])
+            .remove_vertical(),
+    );
+    table.with(tabled::settings::style::BorderSpanCorrection);
+    builder.push_record(vec![table.to_string()]);
+}
+
+fn divide(value: u128, divisor: u128) -> (u128, u128) {
+    let integer_part = value / divisor;
+    let fractional_part = value % divisor;
+    (integer_part, fractional_part)
+}
+
+fn format_balance(
+    value: u128,
+    coin_decimals: u8,
+    format_decimals: usize,
+    symbol: Option<&str>,
+) -> String {
+    let mut suffix = if let Some(symbol) = symbol {
+        format!(" {symbol}")
+    } else {
+        "".to_string()
+    };
+
+    let mut coin_decimals = coin_decimals as u32;
+    let billions = 10u128.pow(coin_decimals + 9);
+    let millions = 10u128.pow(coin_decimals + 6);
+    let thousands = 10u128.pow(coin_decimals + 3);
+    let units = 10u128.pow(coin_decimals);
+
+    let (whole, fractional) = if value > billions {
+        coin_decimals += 9;
+        suffix = format!("B{suffix}");
+        divide(value, billions)
+    } else if value > millions {
+        coin_decimals += 6;
+        suffix = format!("M{suffix}");
+        divide(value, millions)
+    } else if value > thousands {
+        coin_decimals += 3;
+        suffix = format!("K{suffix}");
+        divide(value, thousands)
+    } else {
+        divide(value, units)
+    };
+
+    let mut fractional = format!("{fractional:0width$}", width = coin_decimals as usize);
+    fractional.truncate(format_decimals);
+
+    format!("{whole}.{fractional}{suffix}")
+}
+
+/// Helper function to reduce code duplication for executing dry run
+pub async fn execute_dry_run(
+    context: &mut WalletContext,
+    signer: HaneulAddress,
+    kind: TransactionKind,
+    gas_budget: Option<u64>,
+    gas_price: u64,
+    gas_payment: Vec<ObjectRef>,
+    sponsor: Option<HaneulAddress>,
+) -> Result<HaneulClientCommandResult, anyhow::Error> {
+    let client = context.grpc_client()?;
+    let gas_budget = match gas_budget {
+        Some(gas_budget) => gas_budget,
+        None => max_gas_budget(&client).await?,
+    };
+    let tx_data = TransactionData::new_with_gas_coins_allow_sponsor(
+        kind,
+        signer,
+        gas_payment,
+        gas_budget,
+        gas_price,
+        sponsor.unwrap_or(signer),
+    );
+    debug!("Executing dry run");
+    let response = client
+        .simulate_transaction(&tx_data, true)
+        .await
+        .context("Dry run failed")?;
+    debug!("Finished executing dry run");
+    Ok(HaneulClientCommandResult::DryRun(response))
+}
+
+/// Call a dry run with the transaction data to estimate the gas budget.
+/// The estimated gas budget is computed as following:
+/// * the maximum between A and B, where:
+///
+/// A = computation cost + GAS_SAFE_OVERHEAD * reference gas price
+/// B = computation cost + storage cost - storage rebate + GAS_SAFE_OVERHEAD * reference gas price
+/// overhead
+///
+/// This gas estimate is computed exactly as in the TypeScript SDK
+/// <https://github.com/GeunhwaJeong/haneul/blob/3c4369270605f78a243842098b7029daf8d883d9/sdk/typescript/src/transactions/TransactionBlock.ts#L845-L858>
+pub async fn estimate_gas_budget(
+    context: &mut WalletContext,
+    signer: HaneulAddress,
+    kind: TransactionKind,
+    gas_price: u64,
+    gas_payment: Vec<ObjectRef>,
+    sponsor: Option<HaneulAddress>,
+) -> Result<u64, anyhow::Error> {
+    let dry_run =
+        execute_dry_run(context, signer, kind, None, gas_price, gas_payment, sponsor).await;
+    if let Ok(HaneulClientCommandResult::DryRun(dry_run)) = dry_run {
+        let rgp = context.get_reference_gas_price().await?;
+        Ok(estimate_gas_budget_from_gas_cost(
+            dry_run.transaction.effects.gas_cost_summary(),
+            rgp,
+        ))
+    } else {
+        bail!(
+            "Could not determine the gas budget. Error: {}",
+            dry_run.unwrap_err()
+        )
+    }
+}
+
+pub fn estimate_gas_budget_from_gas_cost(
+    gas_cost_summary: &GasCostSummary,
+    reference_gas_price: u64,
+) -> u64 {
+    let safe_overhead = GAS_SAFE_OVERHEAD * reference_gas_price;
+    let computation_cost_with_overhead = gas_cost_summary.computation_cost + safe_overhead;
+
+    let gas_usage = gas_cost_summary.net_gas_usage() + safe_overhead as i64;
+    computation_cost_with_overhead.max(if gas_usage < 0 { 0 } else { gas_usage as u64 })
+}
+
+/// Queries the protocol config for the maximum gas allowed in a transaction.
+pub async fn max_gas_budget(client: &Client) -> Result<u64, anyhow::Error> {
+    let cfg = client.get_protocol_config(None).await?;
+    Ok(
+        match cfg
+            .attributes()
+            .get("max_tx_gas")
+            .and_then(|s| s.parse::<u64>().ok())
+        {
+            Some(y) => y,
+            _ => bail!(
+                "Could not automatically find the maximum gas allowed in a transaction from the \
+            protocol config. Please provide a gas budget with the --gas-budget flag."
+            ),
+        },
+    )
+}
+
+/// Dry run, execute, or serialize a transaction.
+///
+/// This basically extracts the logical code for each command that deals with dry run, executing,
+/// or serializing a transaction and puts it in a function to reduce code duplication.
+pub(crate) async fn dry_run_or_execute_or_serialize(
+    signer: HaneulAddress,
+    tx_kind: TransactionKind,
+    context: &mut WalletContext,
+    gas_payment: Vec<ObjectRef>,
+    gas_data: GasDataArgs,
+    processing: TxProcessingArgs,
+) -> Result<HaneulClientCommandResult, anyhow::Error> {
+    let GasDataArgs {
+        gas_budget,
+        gas_price,
+        gas_sponsor,
+    } = gas_data;
+
+    let TxProcessingArgs {
+        tx_digest,
+        dry_run,
+        dev_inspect,
+        serialize_unsigned_transaction,
+        serialize_signed_transaction,
+        sender,
+    } = processing;
+
+    ensure!(
+        !serialize_unsigned_transaction || !serialize_signed_transaction,
+        "Cannot specify both flags: --serialize-unsigned-transaction and --serialize-signed-transaction."
+    );
+
+    let gas_price = if let Some(gas_price) = gas_price {
+        gas_price
+    } else {
+        context.get_reference_gas_price().await?
+    };
+
+    let client = context.grpc_client()?;
+
+    let signer = sender.unwrap_or(signer);
+
+    if dev_inspect {
+        return execute_dev_inspect(
+            context,
+            signer,
+            tx_kind,
+            gas_budget,
+            gas_price,
+            gas_payment,
+            gas_sponsor,
+            None,
+        )
+        .await;
+    }
+
+    if dry_run {
+        return execute_dry_run(
+            context,
+            signer,
+            tx_kind,
+            gas_budget,
+            gas_price,
+            gas_payment.clone(),
+            None,
+        )
+        .await;
+    }
+
+    let gas_budget = match gas_budget {
+        Some(gas_budget) => gas_budget,
+        None => {
+            debug!("Estimating gas budget");
+            let budget = estimate_gas_budget(
+                context,
+                signer,
+                tx_kind.clone(),
+                gas_price,
+                gas_payment.clone(),
+                gas_sponsor,
+            )
+            .await?;
+            debug!("Finished estimating gas budget");
+            budget
+        }
+    };
+
+    let gas_payment = if !gas_payment.is_empty() {
+        gas_payment
+    } else {
+        let input_objects: Vec<_> = tx_kind
+            .input_objects()?
+            .iter()
+            .filter_map(|o| match o {
+                InputObjectKind::ImmOrOwnedMoveObject((id, _, _)) => Some(*id),
+                _ => None,
+            })
+            .collect();
+
+        let gas_payment = client
+            .transaction_builder()
+            .select_gas(
+                gas_sponsor.unwrap_or(signer),
+                None,
+                gas_budget,
+                input_objects,
+                gas_price,
+            )
+            .await?;
+
+        vec![gas_payment]
+    };
+
+    debug!("Preparing transaction data");
+    let tx_data = TransactionData::new_with_gas_coins_allow_sponsor(
+        tx_kind,
+        signer,
+        gas_payment,
+        gas_budget,
+        gas_price,
+        gas_sponsor.unwrap_or(signer),
+    );
+    debug!("Finished preparing transaction data");
+
+    if serialize_unsigned_transaction {
+        Ok(HaneulClientCommandResult::SerializedUnsignedTransaction(
+            tx_data,
+        ))
+    } else if tx_digest {
+        Ok(HaneulClientCommandResult::ComputeTransactionDigest(tx_data))
+    } else {
+        let mut signatures = vec![
+            context
+                .sign_secure(
+                    &KeyIdentity::Address(signer),
+                    &tx_data,
+                    Intent::haneul_transaction(),
+                )
+                .await?
+                .into(),
+        ];
+
+        if let Some(gas_sponsor) = gas_sponsor
+            && gas_sponsor != signer
+        {
+            signatures.push(
+                context
+                    .sign_secure(
+                        &KeyIdentity::Address(gas_sponsor),
+                        &tx_data,
+                        Intent::haneul_transaction(),
+                    )
+                    .await?
+                    .into(),
+            );
+        }
+
+        let sender_signed_data = SenderSignedData::new(tx_data, signatures);
+        if serialize_signed_transaction {
+            Ok(HaneulClientCommandResult::SerializedSignedTransaction(
+                sender_signed_data,
+            ))
+        } else {
+            let transaction = Transaction::new(sender_signed_data);
+            debug!("Executing transaction: {:?}", transaction);
+            let response = context
+                .execute_transaction_may_fail(transaction.clone())
+                .await?;
+            debug!("Transaction executed: {:?}", transaction);
+            if let ExecutionStatus::Failure { error, command } = response.effects.status() {
+                let description = if let Some(command) = command {
+                    format!("{error:?} in command {command}")
+                } else {
+                    format!("{error:?}")
+                };
+
+                let error = render_clever_error_opt(&description, &client)
+                    .await
+                    .unwrap_or(description);
+
+                return Err(anyhow!(
+                    "Error executing transaction '{}': {error}",
+                    response.transaction.digest(),
+                ));
+            }
+            Ok(HaneulClientCommandResult::TransactionBlock(response))
+        }
+    }
+}
+
+async fn execute_dev_inspect(
+    context: &mut WalletContext,
+    signer: HaneulAddress,
+    tx_kind: TransactionKind,
+    gas_budget: Option<u64>,
+    gas_price: u64,
+    gas_objects: Vec<ObjectRef>,
+    gas_sponsor: Option<HaneulAddress>,
+    skip_checks: Option<bool>,
+) -> Result<HaneulClientCommandResult, anyhow::Error> {
+    let client = context.grpc_client()?;
+
+    let max_gas_budget = max_gas_budget(&client).await?;
+    let tx = TransactionData::new_with_gas_coins_allow_sponsor(
+        tx_kind,
+        signer,
+        gas_objects,
+        gas_budget.unwrap_or(max_gas_budget),
+        gas_price,
+        gas_sponsor.unwrap_or(signer),
+    );
+
+    let result = client
+        .simulate_transaction(&tx, !skip_checks.unwrap_or(false))
+        .await?;
+    Ok(HaneulClientCommandResult::DevInspect(result))
+}
+
+/// Warn the user if the CLI falls behind more than 2 protocol versions.
+async fn check_protocol_version_and_warn(client: &Client) -> Result<(), anyhow::Error> {
+    let protocol_cfg = client.get_protocol_config(None).await?;
+    let on_chain_protocol_version = protocol_cfg.protocol_version();
+    let cli_protocol_version = ProtocolVersion::MAX.as_u64();
+    if (cli_protocol_version + 2) < on_chain_protocol_version {
+        eprintln!(
+            "{}",
+            format!(
+                "[warning] CLI's protocol version is {cli_protocol_version}, but the active \
+                network's protocol version is {on_chain_protocol_version}. \
+                \n Consider installing the latest version of the CLI - \
+                https://docs.haneul.io/guides/developer/getting-started/haneul-install \n\n \
+                If publishing/upgrading returns a dependency verification error, then install the \
+                latest CLI version."
+            )
+            .yellow()
+            .bold()
+        );
+    }
+
+    Ok(())
+}
+
+/// Fetch move packages
+async fn fetch_move_packages(
+    mut client: Client,
+    immediate_dep_packages: &BTreeMap<Symbol, ObjectID>,
+) -> Result<Vec<MovePackage>, anyhow::Error> {
+    let package_ids: Vec<_> = immediate_dep_packages.values().cloned().collect(); // a map from id to pkg name for finding package names for error reporting.
+    let pkg_id_to_name: BTreeMap<_, _> = immediate_dep_packages
+        .iter()
+        .map(|(name, id)| (id, name))
+        .collect();
+
+    let mut packages = Vec::with_capacity(package_ids.len());
+    for id in package_ids {
+        let o = client
+            .get_object(id)
+            .await
+            .map_err(|e| anyhow::anyhow!("{}", e.message()))
+            .with_context(|| {
+                format!(
+                    "Failed to fetch package {}",
+                    pkg_id_to_name
+                        .get(&id)
+                        .map_or("of unknown name", |x| x.as_str())
+                )
+            })?;
+        let package = o.data.try_as_package().cloned().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Failed to fetch package {}, found object instead of package",
+                pkg_id_to_name
+                    .get(&id)
+                    .map_or("of unknown name", |x| x.as_str())
+            )
+        })?;
+        packages.push(package);
+    }
+
+    Ok(packages)
+}
+
+// Fetch the original ids of all the transitive dependencies of the immediate package dependencies
+async fn trans_deps_original_ids(
+    client: Client,
+    immediate_dep_packages: &BTreeMap<Symbol, ObjectID>,
+) -> Result<BTreeSet<ObjectID>, anyhow::Error> {
+    let pkgs = fetch_move_packages(client, immediate_dep_packages).await?;
+    let linkage_table = pkgs
+        .iter()
+        .flat_map(|pkg| pkg.linkage_table().keys())
+        .copied()
+        .collect();
+
+    Ok(linkage_table)
+}
+
+/// Filter out a package's dependencies which are not referenced in the source code. The algorithm
+/// finds the immediate dependencies of this package, and the original ids of each transitive
+/// dependencies for all these immediate package dependencies. For packages that are not referenced
+/// in the source code, they will be filtered out from the list of dependencies.
+pub(crate) async fn pkg_tree_shake(
+    client: Client,
+    with_unpublished_deps: bool,
+    compiled_package: &mut CompiledPackage,
+) -> Result<(), anyhow::Error> {
+    info!(
+        "Dependency ids before tree shaking {:?}",
+        compiled_package.dependency_ids
+    );
+
+    // Start from the root modules (or all modules if with_unpublished_deps is true as we
+    // need to include modules with 0x0 address)
+    let root_modules: Vec<_> = if with_unpublished_deps {
+        compiled_package
+            .package
+            .all_compiled_units_with_source()
+            .filter(|m| m.unit.address.into_inner() == AccountAddress::ZERO)
+            .map(|x| x.unit.clone())
+            .collect()
+    } else {
+        compiled_package
+            .package
+            .root_modules()
+            .map(|x| x.unit.clone())
+            .collect()
+    };
+
+    let mut pkgs_to_keep: BTreeSet<Symbol> = BTreeSet::new();
+    let module_to_pkg_name: BTreeMap<_, _> = compiled_package
+        .package
+        .all_compiled_units_with_source()
+        .map(|m| (m.unit.module.self_id(), m.unit.package_name))
+        .collect();
+
+    // Find the immediate dependencies for each root module and store the package name
+    // in the pkgs_to_keep set. This basically prunes the packages that are not used
+    // based on the modules information.
+    for module in &root_modules {
+        let immediate_deps = module.module.immediate_dependencies();
+        info!(
+            "Module {} immediate deps: {:?}",
+            module.module.self_id(),
+            immediate_deps
+        );
+        for dep in immediate_deps {
+            if let Some(pkg_name) = module_to_pkg_name.get(&dep) {
+                let Some(pkg_name) = pkg_name else {
+                    bail!("Expected a package name but it's None")
+                };
+                pkgs_to_keep.insert(*pkg_name);
+            }
+        }
+    }
+
+    // filter out packages that are published and exist in the manifest at the
+    // compilation time but are not referenced in the source code.
+    let immediate_dep_packages: BTreeMap<_, _> = compiled_package
+        .dependency_ids
+        .clone()
+        .published
+        .into_iter()
+        .filter(|(pkg_name, _)| {
+            // println!("Pkgs to keep {:?}", pkgs_to_keep);
+            // println!("Pkg name {pkg_name}");
+            // println!("{}", pkgs_to_keep.contains(pkg_name));
+            pkgs_to_keep.contains(pkg_name)
+        })
+        .collect();
+
+    info!("Pkgs to keep {pkgs_to_keep:#?}");
+    info!("Immediate dep packages {:?}", immediate_dep_packages);
+
+    let pkg_name_to_orig_id: BTreeMap<Symbol, ObjectID> = compiled_package
+        .package
+        .deps_compiled_units
+        .iter()
+        .map(|(pkg_name, module)| (*pkg_name, ObjectID::from(module.unit.address.into_inner())))
+        .collect();
+
+    info!("Pkg name to orig id {:#?}", pkg_name_to_orig_id);
+
+    let trans_deps_orig_ids = trans_deps_original_ids(client, &immediate_dep_packages).await?;
+
+    info!("Trans deps orig ids {:?}", trans_deps_orig_ids);
+
+    // for every published package in the original list of published dependencies, get its original
+    // id and then check if that id exists in the linkage table. If it does, then we need to keep
+    // this package. Similarly, all immediate dep packages must stay
+    compiled_package.dependency_ids.published.retain(|pkg, _| {
+        immediate_dep_packages.contains_key(pkg)
+            || pkg_name_to_orig_id
+                .get(pkg)
+                .is_some_and(|id| trans_deps_orig_ids.contains(id))
+    });
+
+    info!(
+        "Deps ids after tree shaking {:?}",
+        compiled_package.dependency_ids
+    );
+
+    Ok(())
+}
+
+pub async fn load_root_pkg_for_publish_upgrade(
+    wallet: &WalletContext,
+    build_config: &MoveBuildConfig,
+    path: &Path,
+) -> anyhow::Result<RootPackage<HaneulFlavor>> {
+    let env = find_environment(path, build_config.environment.clone(), wallet).await?;
+    Ok(build_config.package_loader(path, &env).load().await?)
+}
+
+pub async fn load_root_pkg_for_ephemeral_publish_or_upgrade(
+    package_path: &Path,
+    chain_id: &str,
+    build_env: Option<String>,
+    pubfile_path: PathBuf,
+    modes: Vec<ModeName>,
+) -> anyhow::Result<RootPackage<HaneulFlavor>> {
+    Ok(PackageLoader::new_ephemeral(
+        package_path,
+        build_env.clone(),
+        chain_id.to_string(),
+        pubfile_path,
+    )
+    .modes(modes)
+    .load()
+    .await?)
+}
+
+/// Return the update publication data, without writing it to lockfile
+pub fn update_publication(
+    chain_id: &str,
+    command: LockCommand,
+    response: &ExecutedTransaction,
+    _build_config: &MoveBuildConfig,
+    publication: Option<&mut Publication<HaneulFlavor>>,
+) -> Result<Publication<HaneulFlavor>, anyhow::Error> {
+    // Get the published package ID and version from the response
+    let (published_id, version, _) = response.get_new_package_obj().ok_or_else(|| {
+        anyhow!(
+            "Expected a valid published package response but didn't see \
+         one when attempting to update the `Move.lock`."
+        )
+    })?;
+
+    match command {
+        LockCommand::Publish => {
+            let (upgrade_cap, _, _) = response
+                .get_new_package_upgrade_cap()
+                .ok_or_else(|| anyhow!("Expected a valid published package with a upgrade cap"))?;
+            Ok(Publication::<HaneulFlavor> {
+                chain_id: chain_id.to_string(),
+                metadata: haneul_package_alt::PublishedMetadata {
+                    toolchain_version: Some(env!("CARGO_PKG_VERSION").into()),
+                    build_config: Some(haneul_package_alt::BuildParams::default()),
+                    upgrade_capability: Some(upgrade_cap),
+                },
+                addresses: PublishAddresses {
+                    published_at: PublishedID(*published_id),
+                    original_id: OriginalID(*published_id),
+                },
+                version: version.value(),
+            })
+        }
+        LockCommand::Upgrade => {
+            let publication =
+                publication.expect("for upgrade there should already exist publication info");
+            publication.addresses.published_at = PublishedID(*published_id);
+            publication.version = version.value();
+            // TODO: fix build config data
+            publication.metadata.build_config = Some(BuildParams::default());
+            publication.metadata.toolchain_version = Some(env!("CARGO_PKG_VERSION").into());
+            // TODO: fix this, we should return a mut publication instead of creating a new one in
+            // the Publish case
+            Ok(publication.clone())
+        }
+    }
+}
+
+async fn publish_command(
+    args: PublishArgs,
+    root_package: &mut RootPackage<HaneulFlavor>,
+    context: &mut WalletContext,
+) -> Result<HaneulClientCommandResult, anyhow::Error> {
+    let PublishArgs {
+        package_path,
+        build_config,
+        skip_dependency_verification: _,
+        verify_deps: _,
+        with_unpublished_dependencies,
+        payment,
+        gas_data,
+        processing,
+    } = args;
+
+    let sender = processing
+        .sender
+        .unwrap_or(context.infer_sender(&payment.gas).await?);
+    let client = context.grpc_client()?;
+    let chain_id = client.get_chain_identifier().await?;
+
+    check_protocol_version_and_warn(&client).await?;
+    let package_path =
+        package_path
+            .canonicalize()
+            .map_err(|e| HaneulErrorKind::ModulePublishFailure {
+                error: format!("Failed to canonicalize package path: {}", e),
+            })?;
+
+    let compiled_package = compile_package(
+        client.clone(),
+        root_package,
+        build_config.clone(),
+        &package_path,
+        with_unpublished_dependencies,
+    )
+    .await;
+
+    let compiled_package = compiled_package?;
+
+    root_package.save_lockfile_to_disk()?;
+    let compiled_modules = compiled_package.get_package_bytes(with_unpublished_dependencies);
+    let dep_ids = compiled_package.get_published_dependencies_ids();
+
+    let tx_kind = client
+        .transaction_builder()
+        .publish_tx_kind(sender, compiled_modules, dep_ids)
+        .await?;
+
+    let gas_payment = client
+        .transaction_builder()
+        .input_refs(&payment.gas)
+        .await?;
+
+    let result = dry_run_or_execute_or_serialize(
+        sender,
+        tx_kind,
+        context,
+        gas_payment,
+        gas_data,
+        processing,
+    )
+    .await?;
+
+    let response = if let HaneulClientCommandResult::TransactionBlock(ref tx) = result {
+        tx
+    } else {
+        return Ok(result);
+    };
+
+    let publish_data = update_publication(
+        &chain_id.to_string(),
+        LockCommand::Publish,
+        response,
+        &build_config,
+        None,
+    )?;
+
+    root_package.write_publish_data(publish_data)?;
+    Ok(result)
+}
+
+async fn upgrade_command(
+    args: UpgradeArgs,
+    context: &mut WalletContext,
+    is_ephemeral: bool,
+) -> Result<HaneulClientCommandResult, anyhow::Error> {
+    let UpgradeArgs {
+        package_path,
+        upgrade_capability,
+        mut build_config,
+        skip_dependency_verification,
+        verify_deps,
+        skip_verify_compatibility,
+        with_unpublished_dependencies,
+        payment,
+        gas_data,
+        processing,
+    } = args;
+
+    let sender = processing
+        .sender
+        .unwrap_or(context.infer_sender(&payment.gas).await?);
+    let client = context.grpc_client()?;
+    let chain_id = client.get_chain_identifier().await?.to_string();
+
+    // For upgrade, we want to force the root package to have `0x0` as its address
+    build_config.root_as_zero = true;
+
+    check_protocol_version_and_warn(&client).await?;
+    let package_path =
+        package_path
+            .canonicalize()
+            .map_err(|e| HaneulErrorKind::ModulePublishFailure {
+                error: format!("Failed to canonicalize package path: {}", e),
+            })?;
+
+    let mut root_pkg = if is_ephemeral {
+        let alias = context.get_active_env()?.alias.clone();
+        let pubfile_path = get_pubfile_path_or_default(build_config.pubfile_path.as_ref(), &alias);
+        load_root_pkg_for_ephemeral_publish_or_upgrade(
+            &package_path,
+            &chain_id,
+            build_config.environment.clone(),
+            pubfile_path,
+            build_config.mode_set(),
+        )
+        .await?
+    } else {
+        load_root_pkg_for_publish_upgrade(context, &build_config, &package_path).await?
+    };
+
+    let verify = check_dep_verification_flags(skip_dependency_verification, verify_deps)?;
+
+    let upgrade_cap = if let Some(ref upgrade_cap) = upgrade_capability {
+        upgrade_cap
+    } else {
+        &root_pkg.publication().as_ref().ok_or_else(|| {
+                        anyhow!("Cannot determine the publication information. Please pass the upgrade cap with `-c <UPGRADE_CAP>`.")
+                    })?
+                    .metadata.upgrade_capability.ok_or_else(|| {
+                        anyhow!("No upgrade capability found in the published data. Please pass the upgrade cap with `-c <UPGRADE_CAP>`.")
+                    })?
+    };
+
+    // TODO: pkg-alt we should read upgrade cap from published file, but the question
+    // is how do we migrate? During migration we might want to try to find the upgrade
+    // cap?
+    let upgrade_result = upgrade_package(
+        client.clone(),
+        &root_pkg,
+        build_config.clone(),
+        &package_path,
+        *upgrade_cap,
+        with_unpublished_dependencies,
+        !verify,
+    )
+    .await;
+
+    let (upgrade_policy, compiled_package) = upgrade_result.map_err(|e| anyhow!("{e}"))?;
+
+    let compiled_modules = compiled_package.get_package_bytes(with_unpublished_dependencies);
+    let package_id = compiled_package
+        .published_at
+        .ok_or_else(|| anyhow::anyhow!("Cannot upgrade package without having a published id "))?;
+    let package_digest = compiled_package.get_package_digest(with_unpublished_dependencies);
+    let dep_ids = compiled_package.get_published_dependencies_ids();
+
+    if !skip_verify_compatibility {
+        let protocol_version = client.get_protocol_config(None).await?.protocol_version();
+
+        let protocol_config = ProtocolConfig::get_for_version(
+            protocol_version.into(),
+            match ChainIdentifier::from_chain_short_id(&chain_id) {
+                Some(chain_id) => chain_id.chain(),
+                None => Chain::Unknown,
+            },
+        );
+        check_compatibility(
+            client.clone(),
+            package_id,
+            compiled_package,
+            package_path.clone(),
+            upgrade_policy,
+            protocol_config,
+        )
+        .await?;
+    }
+
+    let tx_kind = client
+        .transaction_builder()
+        .upgrade_tx_kind(
+            package_id,
+            compiled_modules,
+            dep_ids,
+            *upgrade_cap,
+            upgrade_policy,
+            package_digest.to_vec(),
+        )
+        .await?;
+
+    let gas_payment = client
+        .transaction_builder()
+        .input_refs(&payment.gas)
+        .await?;
+
+    let result = dry_run_or_execute_or_serialize(
+        sender,
+        tx_kind,
+        context,
+        gas_payment,
+        gas_data,
+        processing,
+    )
+    .await?;
+
+    let response = if let HaneulClientCommandResult::TransactionBlock(ref tx) = result {
+        tx
+    } else {
+        return Ok(result);
+    };
+
+    let publish_data = update_publication(
+        &chain_id,
+        LockCommand::Upgrade,
+        response,
+        &build_config,
+        root_pkg.publication().cloned().as_mut(),
+    )?;
+    root_pkg.write_publish_data(publish_data)?;
+
+    Ok(result)
+}
+
+async fn publish_ephemeral_unpublished_dependencies(
+    args: &TestPublishArgs,
+    chain_id: &str,
+    build_env: Option<String>,
+    pubfile_path: PathBuf,
+    modes: Vec<ModeName>,
+    context: &mut WalletContext,
+) -> Result<(), anyhow::Error> {
+    if !args.publish_unpublished_deps {
+        return Ok(());
+    }
+
+    if args.publish_args.gas_data.gas_sponsor.is_some() {
+        bail!(
+            "Cannot specify gas data when publishing transitively, as it executes multiple transactions."
+        );
+    }
+
+    if !args.publish_args.payment.gas.is_empty() {
+        bail!(
+            "Cannot specify payment when publishing transitively, as it executes multiple transactions."
+        );
+    }
+
+    if args.publish_args.with_unpublished_dependencies {
+        bail!(
+            "You cannot specify both `--publish-unpublished-deps` and `--with-unpublished-dependencies` at the same time."
+        );
+    }
+
+    let root_package = load_root_pkg_for_ephemeral_publish_or_upgrade(
+        args.publish_args.package_path.as_path(),
+        chain_id,
+        build_env.clone(),
+        pubfile_path.clone(),
+        modes.clone(),
+    )
+    .await?;
+
+    if root_package.package_info().published().is_some() {
+        bail!(
+            "The root package is already published in {pubfile_path:?}, consider removing it or using the test-upgrade command"
+        );
+    }
+
+    // Reverse the deps, we want the "deeper" ones first.
+    for dep in root_package.sorted_packages().into_iter().rev() {
+        // skip root package
+        if dep.is_root() {
+            continue;
+        }
+
+        // Skip already ephemerally published packages as well as system packages
+        if dep.published().is_some() {
+            continue;
+        }
+
+        let dep_path = dep.path().path();
+        let mut dep_root_package = load_root_pkg_for_ephemeral_publish_or_upgrade(
+            dep_path,
+            chain_id,
+            build_env.clone(),
+            pubfile_path.clone(),
+            modes.clone(),
+        )
+        .await?;
+
+        let publish_args = PublishArgs {
+            package_path: dep_path.to_path_buf(),
+            build_config: args.publish_args.build_config.clone(),
+            skip_dependency_verification: args.publish_args.skip_dependency_verification,
+            verify_deps: args.publish_args.verify_deps,
+            with_unpublished_dependencies: false,
+            payment: PaymentArgs::default(),
+            gas_data: args.publish_args.gas_data.clone(),
+            processing: args.publish_args.processing.clone(),
+        };
+
+        eprintln!("Publishing transitive dependency: {}", dep.display_name());
+        publish_command(publish_args, &mut dep_root_package, context).await?;
+    }
+
+    Ok(())
+}
+
+/// Make sure we do not have test mode enabled for publish or upgrade
+fn verify_no_test_mode(build_config: &MoveBuildConfig) -> anyhow::Result<()> {
+    if build_config.test_mode {
+        return Err(HaneulErrorKind::ModulePublishFailure {
+            error:
+                "The `publish` or `upgrade` subcommand should not be used with the `--test` flag\n\
+                \n\
+                Code in published packages must not depend on test code.\n\
+                In order to fix this and publish or upgrade the package without `--test`, \
+                remove any non-test dependencies on test-only code.\n\
+                You can ensure all test-only dependencies have been removed by \
+                compiling the package normally with `haneul move build`."
+                    .to_string(),
+        }
+        .into());
+    }
+    Ok(())
+}
+
+/// Make sure --pubfile-path is not used with publish or upgrade (use test-publish/test-upgrade instead)
+fn verify_no_pubfile_path(build_config: &MoveBuildConfig, command: &str) -> anyhow::Result<()> {
+    if build_config.pubfile_path.is_some() {
+        return Err(HaneulErrorKind::ModulePublishFailure {
+            error: format!(
+                "The `{command}` subcommand should not be used with the `--pubfile-path` flag.\n\
+                \n\
+                Use `test-{command}` instead for ephemeral publication."
+            ),
+        }
+        .into());
+    }
+    Ok(())
+}
+
+/// Extract the host from a URL string
+fn url_to_host(url: &str) -> anyhow::Result<String> {
+    url::Url::parse(url)?
+        .host_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| anyhow!("Cannot extract host from url: {}", url))
+}
+
+/// Find the faucet URL based on the RPC URL. It maps the public networks to their faucet URLs, for
+/// devnet and localnet. For testnet, it instructs the user to use the web UI.
+fn find_faucet_url(address: HaneulAddress, rpc: &str) -> anyhow::Result<String> {
+    let host = url_to_host(rpc)?;
+    let devnet_host = url_to_host(HANEUL_DEVNET_URL)?;
+    let testnet_host = url_to_host(HANEUL_TESTNET_URL)?;
+    let localhost = url_to_host(HANEUL_LOCAL_NETWORK_URL)?;
+    let localhost_0 = url_to_host(HANEUL_LOCAL_NETWORK_URL_0)?;
+
+    if host == devnet_host {
+        return Ok("https://faucet.devnet.haneul.io/v2/gas".to_string());
+    }
+
+    if host == testnet_host {
+        bail!(
+            "For testnet tokens, please use the Web UI: https://faucet.haneul.io/?address={address}"
+        );
+    }
+
+    if host == localhost || host == localhost_0 {
+        Ok("http://127.0.0.1:9123/v2/gas".to_string())
+    } else {
+        bail!("Cannot recognize the active network. Please provide the gas faucet full URL.")
+    }
+}
