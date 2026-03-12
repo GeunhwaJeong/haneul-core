@@ -1,0 +1,26 @@
+[package]
+name = "haneullabs-metrics"
+version = "0.7.0"
+authors = ["Haneul Labs <build@haneul-labs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+axum.workspace = true
+tracing.workspace = true
+scopeguard.workspace = true
+prometheus.workspace = true
+once_cell.workspace = true
+tap.workspace = true
+tokio.workspace = true
+dashmap.workspace = true
+uuid.workspace = true
+parking_lot.workspace = true
+futures.workspace = true
+async-trait.workspace = true
+prometheus-closure-metric.workspace = true
+simple-server-timing-header.workspace = true
