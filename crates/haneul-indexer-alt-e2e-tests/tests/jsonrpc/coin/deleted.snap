@@ -1,0 +1,134 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 10 tasks
+
+init:
+A: object(0,0), B: object(0,1)
+
+task 1, lines 11-13:
+//# programmable --sender A --inputs 12 @A
+//> 0: SplitCoins(Gas, [Input(0)]);
+//> 1: TransferObjects([Result(0)], Input(1))
+created: object(1,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 2, lines 15-17:
+//# programmable --sender A --inputs 34 @A
+//> 0: SplitCoins(Gas, [Input(0)]);
+//> 1: TransferObjects([Result(0)], Input(1))
+created: object(2,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 3, line 19:
+//# view-object 1,0
+Owner: Account Address ( A )
+Version: 2
+Contents: haneul::coin::Coin<haneul::haneul::HANEUL> {
+    id: haneul::object::UID {
+        id: haneul::object::ID {
+            bytes: fake(1,0),
+        },
+    },
+    balance: haneul::balance::Balance<haneul::haneul::HANEUL> {
+        value: 12u64,
+    },
+}
+
+task 4, line 21:
+//# view-object 2,0
+Owner: Account Address ( A )
+Version: 3
+Contents: haneul::coin::Coin<haneul::haneul::HANEUL> {
+    id: haneul::object::UID {
+        id: haneul::object::ID {
+            bytes: fake(2,0),
+        },
+    },
+    balance: haneul::balance::Balance<haneul::haneul::HANEUL> {
+        value: 34u64,
+    },
+}
+
+task 5, line 23:
+//# create-checkpoint
+Checkpoint created: 1
+
+task 6, lines 25-29:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 0,
+  "result": {
+    "data": [
+      {
+        "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL",
+        "coinObjectId": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+        "version": "3",
+        "digest": "DEkzeRHxap1vPXhy491fTrsmd3NzchCbecWPMhQHdB2C",
+        "balance": "299999995026074",
+        "previousTransaction": "6cdapUQu7iktu3TnFtoPaRup6FNPZaWxJJnk7p2DsvzD"
+      },
+      {
+        "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL",
+        "coinObjectId": "0x0740f69b3ea45f374e2c7141b4fd40b96896f72350567c11184825708ce95685",
+        "version": "3",
+        "digest": "9oBbFcexAHkbrNf29FpSx5bCyV4aaU9mGzWNqMjYkZqT",
+        "balance": "34",
+        "previousTransaction": "6cdapUQu7iktu3TnFtoPaRup6FNPZaWxJJnk7p2DsvzD"
+      },
+      {
+        "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL",
+        "coinObjectId": "0x191744e2ac6eccc92a8847c7edea6e1502cf836bf85abd1145659e09ede9a62a",
+        "version": "2",
+        "digest": "HGmo3Nuhj6tkSDmhRzVajUL8sjs1qLorQjWKaRTWKyUP",
+        "balance": "12",
+        "previousTransaction": "AFkBP8vheCymW2C4nAdXuMJ9DU5E3fNHzW6hPzoWvwTq"
+      }
+    ],
+    "nextCursor": "zAEA/MyaQhu7E8GmahqpjwrXUCnt6UhXd5xpFbRPlAaLkh4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAEY29pbgAAAAAAAAAEQ29pbgAAAAAAAAABAAAABwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAANzdWkAAAAAAAAAA1NVSQAAAAAAAAAAAf/////////zGRdE4qxuzMkqiEfH7epuFQLPg2v4Wr0RRWWeCe3ppio=",
+    "hasNextPage": false
+  }
+}
+
+task 7, lines 31-32:
+//# programmable --sender A --inputs object(1,0) object(2,0)
+//> 0: MergeCoins(Input(0), [Input(1)]);
+mutated: object(0,0), object(1,0)
+deleted: object(2,0)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 2934360, non_refundable_storage_fee: 29640
+
+task 8, line 34:
+//# create-checkpoint
+Checkpoint created: 2
+
+task 9, lines 36-40:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "data": [
+      {
+        "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL",
+        "coinObjectId": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+        "version": "4",
+        "digest": "12qvUnkUyd4hsyUH4udxY31jviDwCu6SAu3T1m69rvPz",
+        "balance": "299999994984434",
+        "previousTransaction": "CA11tFtEZ4RDEJuXjxpQbQsycDq8RSF4uAQDN6qeq5tn"
+      },
+      {
+        "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL",
+        "coinObjectId": "0x191744e2ac6eccc92a8847c7edea6e1502cf836bf85abd1145659e09ede9a62a",
+        "version": "4",
+        "digest": "FKYxvSTZJNv9cisBwCk8yPxmj1QEbSE3EsfUruoqDe8J",
+        "balance": "46",
+        "previousTransaction": "CA11tFtEZ4RDEJuXjxpQbQsycDq8RSF4uAQDN6qeq5tn"
+      }
+    ],
+    "nextCursor": "zAEA/MyaQhu7E8GmahqpjwrXUCnt6UhXd5xpFbRPlAaLkh4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAEY29pbgAAAAAAAAAEQ29pbgAAAAAAAAABAAAABwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAANzdWkAAAAAAAAAA1NVSQAAAAAAAAAAAf/////////RGRdE4qxuzMkqiEfH7epuFQLPg2v4Wr0RRWWeCe3ppio=",
+    "hasNextPage": false
+  }
+}

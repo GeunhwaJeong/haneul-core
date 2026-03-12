@@ -1,0 +1,161 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 11 tasks
+
+init:
+A: object(0,0), B: object(0,1)
+
+task 1, lines 9-11:
+//# programmable --sender A --inputs 12 @A
+//> 0: SplitCoins(Gas, [Input(0)]);
+//> 1: TransferObjects([Result(0)], Input(1))
+created: object(1,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 2, lines 13-15:
+//# programmable --sender A --inputs 34 @A
+//> 0: SplitCoins(Gas, [Input(0)]);
+//> 1: TransferObjects([Result(0)], Input(1))
+created: object(2,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 3, line 17:
+//# view-object 1,0
+Owner: Account Address ( A )
+Version: 2
+Contents: haneul::coin::Coin<haneul::haneul::HANEUL> {
+    id: haneul::object::UID {
+        id: haneul::object::ID {
+            bytes: fake(1,0),
+        },
+    },
+    balance: haneul::balance::Balance<haneul::haneul::HANEUL> {
+        value: 12u64,
+    },
+}
+
+task 4, line 19:
+//# view-object 2,0
+Owner: Account Address ( A )
+Version: 3
+Contents: haneul::coin::Coin<haneul::haneul::HANEUL> {
+    id: haneul::object::UID {
+        id: haneul::object::ID {
+            bytes: fake(2,0),
+        },
+    },
+    balance: haneul::balance::Balance<haneul::haneul::HANEUL> {
+        value: 34u64,
+    },
+}
+
+task 5, line 21:
+//# create-checkpoint
+Checkpoint created: 1
+
+task 6, lines 23-27:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 0,
+  "result": {
+    "data": [
+      {
+        "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL",
+        "coinObjectId": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+        "version": "3",
+        "digest": "DEkzeRHxap1vPXhy491fTrsmd3NzchCbecWPMhQHdB2C",
+        "balance": "299999995026074",
+        "previousTransaction": "6cdapUQu7iktu3TnFtoPaRup6FNPZaWxJJnk7p2DsvzD"
+      },
+      {
+        "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL",
+        "coinObjectId": "0x0740f69b3ea45f374e2c7141b4fd40b96896f72350567c11184825708ce95685",
+        "version": "3",
+        "digest": "9oBbFcexAHkbrNf29FpSx5bCyV4aaU9mGzWNqMjYkZqT",
+        "balance": "34",
+        "previousTransaction": "6cdapUQu7iktu3TnFtoPaRup6FNPZaWxJJnk7p2DsvzD"
+      },
+      {
+        "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL",
+        "coinObjectId": "0x191744e2ac6eccc92a8847c7edea6e1502cf836bf85abd1145659e09ede9a62a",
+        "version": "2",
+        "digest": "HGmo3Nuhj6tkSDmhRzVajUL8sjs1qLorQjWKaRTWKyUP",
+        "balance": "12",
+        "previousTransaction": "AFkBP8vheCymW2C4nAdXuMJ9DU5E3fNHzW6hPzoWvwTq"
+      }
+    ],
+    "nextCursor": "zAEA/MyaQhu7E8GmahqpjwrXUCnt6UhXd5xpFbRPlAaLkh4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAEY29pbgAAAAAAAAAEQ29pbgAAAAAAAAABAAAABwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAANzdWkAAAAAAAAAA1NVSQAAAAAAAAAAAf/////////zGRdE4qxuzMkqiEfH7epuFQLPg2v4Wr0RRWWeCe3ppio=",
+    "hasNextPage": false
+  }
+}
+
+task 7, line 29:
+//# transfer-object 1,0 --sender A --recipient B
+mutated: object(0,0), object(1,0)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 1956240, non_refundable_storage_fee: 19760
+
+task 8, line 31:
+//# create-checkpoint
+Checkpoint created: 2
+
+task 9, lines 33-37:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "data": [
+      {
+        "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL",
+        "coinObjectId": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+        "version": "4",
+        "digest": "EytUUCYYBkJrRe8RLyCmLoPrxaKDbNGFJrZ1Yf3Ffy3h",
+        "balance": "299999994006314",
+        "previousTransaction": "CuWXjpXy4NfQy6yM5EW8HqBj2Zdzn8nbGbPeiJbSocZa"
+      },
+      {
+        "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL",
+        "coinObjectId": "0x0740f69b3ea45f374e2c7141b4fd40b96896f72350567c11184825708ce95685",
+        "version": "3",
+        "digest": "9oBbFcexAHkbrNf29FpSx5bCyV4aaU9mGzWNqMjYkZqT",
+        "balance": "34",
+        "previousTransaction": "6cdapUQu7iktu3TnFtoPaRup6FNPZaWxJJnk7p2DsvzD"
+      }
+    ],
+    "nextCursor": "zAEA/MyaQhu7E8GmahqpjwrXUCnt6UhXd5xpFbRPlAaLkh4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAEY29pbgAAAAAAAAAEQ29pbgAAAAAAAAABAAAABwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAANzdWkAAAAAAAAAA1NVSQAAAAAAAAAAAf/////////dB0D2mz6kXzdOLHFBtP1AuWiW9yNQVnwRGEglcIzpVoU=",
+    "hasNextPage": false
+  }
+}
+
+task 10, lines 39-43:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "data": [
+      {
+        "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL",
+        "coinObjectId": "0x37cf3a6d7bfb547e9eaf95377bde64a81d8a954a38fcb37595663d5ab3c878c8",
+        "version": "1",
+        "digest": "A6EXRqD489D6ThtRtDYeseumJvfAnte6WTnx3kNoJGYP",
+        "balance": "300000000000000",
+        "previousTransaction": "ANmrqK6Qg9cMHFakzsPZbW5xW4mTpLjdbcpisVh9NfiY"
+      },
+      {
+        "coinType": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL",
+        "coinObjectId": "0x191744e2ac6eccc92a8847c7edea6e1502cf836bf85abd1145659e09ede9a62a",
+        "version": "4",
+        "digest": "3G1t86K2GgBcYnMMtjqHdQa9yCMqynvrBAACk5tnSNqa",
+        "balance": "12",
+        "previousTransaction": "CuWXjpXy4NfQy6yM5EW8HqBj2Zdzn8nbGbPeiJbSocZa"
+      }
+    ],
+    "nextCursor": "zAEAp7AycDh4qnTDEmk1eJ/R1NfhEdWRGwkkfWljBhwxK1oAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAEY29pbgAAAAAAAAAEQ29pbgAAAAAAAAABAAAABwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAANzdWkAAAAAAAAAA1NVSQAAAAAAAAAAAf/////////zGRdE4qxuzMkqiEfH7epuFQLPg2v4Wr0RRWWeCe3ppio=",
+    "hasNextPage": false
+  }
+}
