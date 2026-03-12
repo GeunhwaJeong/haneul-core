@@ -1,0 +1,11 @@
+[package]
+name = "Locked Stake"
+version = "0.0.1"
+edition = "2024.beta"
+
+[dependencies]
+Haneul = { local = "../../../crates/haneul-framework/packages/haneul-framework" }
+HaneulSystem = { local = "../../../crates/haneul-framework/packages/haneul-system" }
+
+[addresses]
+locked_stake = "0x0"
