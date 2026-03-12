@@ -1,0 +1,207 @@
+// Copyright (c) Mysten Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use std::error::Error;
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+use std::time::Duration;
+
+use anyhow::Context;
+use reqwest::Client;
+use reqwest::header::HeaderName;
+use serde_json::Value;
+use serde_json::json;
+use haneul_indexer_alt::config::ConcurrentLayer;
+use haneul_indexer_alt::config::IndexerConfig;
+use haneul_indexer_alt::config::Merge;
+use haneul_indexer_alt::config::PipelineLayer;
+use haneul_indexer_alt::config::PrunerLayer;
+use haneul_indexer_alt_framework::ingestion::ClientArgs;
+use haneul_indexer_alt_framework::ingestion::ingestion_client::IngestionClientArgs;
+use haneul_transactional_test_runner::create_adapter;
+use haneul_transactional_test_runner::offchain_state::OffchainStateReader;
+use haneul_transactional_test_runner::offchain_state::TestResponse;
+use haneul_transactional_test_runner::run_tasks_with_adapter;
+use haneul_transactional_test_runner::test_adapter::OffChainConfig;
+use haneul_transactional_test_runner::test_adapter::PRE_COMPILED;
+use haneul_transactional_test_runner::test_adapter::HaneulTestAdapter;
+use tokio::join;
+
+use haneul_indexer_alt_e2e_tests::OffchainCluster;
+use haneul_indexer_alt_e2e_tests::OffchainClusterConfig;
+
+struct OffchainReader {
+    cluster: Arc<OffchainCluster>,
+    client: Client,
+    queries: AtomicUsize,
+}
+
+datatest_stable::harness!(run_test, "tests", r".*\.move$");
+
+impl OffchainReader {
+    fn new(cluster: Arc<OffchainCluster>) -> Self {
+        Self {
+            cluster,
+            client: Client::new(),
+            queries: AtomicUsize::new(0),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl OffchainStateReader for OffchainReader {
+    async fn wait_for_checkpoint_catchup(&self, checkpoint: u64, base_timeout: Duration) {
+        let indexer = self.cluster.wait_for_indexer(checkpoint, base_timeout);
+        let consistent_store = self
+            .cluster
+            .wait_for_consistent_store(checkpoint, base_timeout);
+        let graphql = self.cluster.wait_for_graphql(checkpoint, base_timeout);
+        let _ = join!(indexer, consistent_store, graphql);
+    }
+
+    async fn wait_for_pruned_checkpoint(&self, _: u64, _: Duration) {
+        unimplemented!(
+            "Waiting for pruned checkpoints is not supported in these tests (add it if you need it)"
+        );
+    }
+
+    async fn execute_graphql(
+        &self,
+        query: String,
+        show_usage: bool,
+    ) -> anyhow::Result<TestResponse> {
+        let query = json!({ "query": query });
+
+        let mut request = self.client.post(self.cluster.graphql_url()).json(&query);
+
+        if show_usage {
+            request = request.header(HeaderName::from_static("x-haneul-rpc-show-usage"), "true");
+        }
+
+        let response = request
+            .send()
+            .await
+            .context("Request to GraphQL server failed")?;
+
+        let mut headers = response.headers().clone();
+        headers.remove("date");
+
+        let version = headers
+            .remove("x-haneul-rpc-version")
+            .and_then(|v| v.to_str().ok().map(|s| s.to_owned()));
+
+        let body: Value = response
+            .json()
+            .await
+            .context("Failed to parse GraphQL response")?;
+
+        Ok(TestResponse {
+            response_body: serde_json::to_string_pretty(&body)?,
+            http_headers: Some(headers),
+            service_version: version,
+        })
+    }
+
+    async fn execute_jsonrpc(&self, method: String, params: Value) -> anyhow::Result<TestResponse> {
+        let query = json!({
+            "jsonrpc": "2.0",
+            "id": self.queries.fetch_add(1, Ordering::SeqCst),
+            "method": method,
+            "params": params,
+        });
+
+        let response = self
+            .client
+            .post(self.cluster.jsonrpc_url())
+            .json(&query)
+            .send()
+            .await
+            .context("Request to JSON-RPC server failed")?;
+
+        // Extract headers but remove the ones that will change from run to run.
+        let mut headers = response.headers().clone();
+        headers.remove("date");
+
+        let body: Value = response
+            .json()
+            .await
+            .context("Failed to parse JSON-RPC response")?;
+
+        Ok(TestResponse {
+            response_body: serde_json::to_string_pretty(&body)?,
+            http_headers: Some(headers),
+            service_version: None,
+        })
+    }
+}
+
+async fn cluster(config: &OffChainConfig) -> Arc<OffchainCluster> {
+    let client_args = ClientArgs {
+        ingestion: IngestionClientArgs {
+            local_ingestion_path: Some(config.data_ingestion_path.clone()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    // The test config includes every pipeline, we configure its consistent range using the
+    // off-chain config that was passed in.
+    let pruner = PrunerLayer {
+        retention: Some(config.consistent_range as u64),
+        ..Default::default()
+    };
+
+    let indexer_config = IndexerConfig::for_test()
+        .merge(IndexerConfig {
+            pipeline: PipelineLayer {
+                coin_balance_buckets: Some(ConcurrentLayer {
+                    pruner: Some(pruner.clone()),
+                    ..Default::default()
+                }),
+                obj_info: Some(ConcurrentLayer {
+                    pruner: Some(pruner),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .expect("Failed to create indexer config");
+
+    Arc::new(
+        OffchainCluster::new(
+            client_args,
+            OffchainClusterConfig {
+                indexer_config,
+                ..Default::default()
+            },
+            &prometheus::Registry::new(),
+        )
+        .await
+        .expect("Failed to create off-chain cluster"),
+    )
+}
+
+#[cfg_attr(not(msim), tokio::main)]
+#[cfg_attr(msim, msim::main)]
+async fn run_test(path: &Path) -> Result<(), Box<dyn Error>> {
+    if cfg!(msim) {
+        return Ok(());
+    }
+
+    telemetry_subscribers::init_for_testing();
+
+    // start the adapter first to start the executor (simulacrum)
+    let (output, mut adapter) =
+        create_adapter::<HaneulTestAdapter>(path, Some(Arc::new(PRE_COMPILED.clone()))).await?;
+
+    // configure access to the off-chain reader
+    let c = cluster(adapter.offchain_config.as_ref().unwrap()).await;
+    adapter.with_offchain_reader(Box::new(OffchainReader::new(c.clone())));
+
+    // run the tasks in the test
+    run_tasks_with_adapter(path, adapter, output, None).await?;
+    Ok(())
+}
