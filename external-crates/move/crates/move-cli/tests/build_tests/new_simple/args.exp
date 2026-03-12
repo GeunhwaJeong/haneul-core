@@ -1,0 +1,36 @@
+Command `new P1`:
+External Command `cat P1/Move.toml`:
+[package]
+name = "p1"
+edition = "2024"         # edition = "legacy" to use legacy (pre-2024) Move
+# license = ""           # e.g., "MIT", "GPL", "Apache 2.0"
+# authors = ["..."]      # e.g., ["Joe Smith (joesmith@noemail.com)", "John Snow (johnsnow@noemail.com)"]
+
+[dependencies]
+
+# Read more about the package management system options:
+# https://docs.haneul.io/guides/developer/haneul-101/move-package-management
+External Command `cat P1/.gitignore`:
+build/*
+traces/*
+.trace
+.coverage*
+Pub.*.toml
+Command `new P2 -p other_dir`:
+External Command `cat other_dir/Move.toml`:
+[package]
+name = "p2"
+edition = "2024"         # edition = "legacy" to use legacy (pre-2024) Move
+# license = ""           # e.g., "MIT", "GPL", "Apache 2.0"
+# authors = ["..."]      # e.g., ["Joe Smith (joesmith@noemail.com)", "John Snow (johnsnow@noemail.com)"]
+
+[dependencies]
+
+# Read more about the package management system options:
+# https://docs.haneul.io/guides/developer/haneul-101/move-package-management
+External Command `cat other_dir/.gitignore`:
+build/*
+traces/*
+.trace
+.coverage*
+Pub.*.toml

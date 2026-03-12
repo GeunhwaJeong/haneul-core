@@ -1,0 +1,9 @@
+[package]
+name = "print_values"
+edition = "2024.beta"
+
+[dependencies]
+MoveStdlib = { local = "../../../../move-stdlib" }
+
+[addresses]
+print_values = "0x0"

@@ -1,0 +1,6 @@
+[package]
+name = "summaries"
+edition = "2024"
+
+[dependencies]
+std = { local = "../../../../move-stdlib" }
