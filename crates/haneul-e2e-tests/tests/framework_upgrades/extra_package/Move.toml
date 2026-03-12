@@ -1,0 +1,11 @@
+[package]
+name = "HaneulExtra"
+edition = "2024.beta"
+
+[dependencies]
+HaneulSystem = { local = "../system-packages/haneul-system" }
+Haneul = { local = "../system-packages/haneul-framework" }
+MoveStdlib = { local = "../system-packages/move-stdlib" }
+
+[addresses]
+haneul_extra = "0x42"
