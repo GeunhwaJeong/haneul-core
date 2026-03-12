@@ -1,0 +1,1839 @@
+// Copyright (c) Mysten Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use std::io::{Write, stdout};
+use std::net::{AddrParseError, IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::num::NonZeroUsize;
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
+use std::{fs, io};
+
+use crate::external_signer::ExternalKeysCommand;
+use anyhow::{Context, anyhow, bail, ensure};
+use clap::*;
+use colored::Colorize;
+use fastcrypto::traits::KeyPair;
+use futures::future;
+use move_analyzer::analyzer;
+use move_command_line_common::files::MOVE_COMPILED_EXTENSION;
+use move_compiler::editions::Flavor;
+use move_package_alt_compilation::build_config::BuildConfig;
+use haneullabs_common::tempdir;
+use prometheus::Registry;
+use rand::rngs::OsRng;
+use serde_json::json;
+use std::collections::BTreeMap;
+use haneul_bridge::config::BridgeCommitteeConfig;
+use haneul_bridge::metrics::BridgeMetrics;
+use haneul_bridge::haneul_client::HaneulBridgeClient;
+use haneul_bridge::haneul_transaction_builder::build_committee_register_transaction;
+use haneul_config::node::Genesis;
+use haneul_config::p2p::SeedPeer;
+use haneul_config::{
+    Config, FULL_NODE_DB_PATH, PersistedConfig, HANEUL_CLIENT_CONFIG, HANEUL_FULLNODE_CONFIG,
+    HANEUL_NETWORK_CONFIG, genesis_blob_exists, haneul_config_dir,
+};
+use haneul_config::{
+    HANEUL_BENCHMARK_GENESIS_GAS_KEYSTORE_FILENAME, HANEUL_GENESIS_FILENAME, HANEUL_KEYSTORE_FILENAME,
+};
+use haneul_faucet::{AppState, FaucetConfig, LocalFaucet, create_wallet_context, start_faucet};
+use haneul_futures::service::Service;
+use haneul_indexer_alt::{config::IndexerConfig, setup_indexer};
+use haneul_indexer_alt_consistent_store::{
+    args::RpcArgs as ConsistentArgs, config::ServiceConfig as ConsistentConfig,
+    start_service as start_consistent_store,
+};
+use haneul_indexer_alt_framework::{
+    IndexerArgs,
+    ingestion::{ClientArgs, ingestion_client::IngestionClientArgs},
+};
+use haneul_indexer_alt_graphql::{
+    RpcArgs as GraphQlArgs, args::KvArgs as GraphQlKvArgs, config::RpcConfig as GraphQlConfig,
+    start_rpc as start_graphql,
+};
+use haneul_indexer_alt_reader::{
+    consistent_reader::ConsistentReaderArgs, fullnode_client::FullnodeArgs,
+    system_package_task::SystemPackageTaskArgs,
+};
+use haneul_keys::key_derive::generate_new_key;
+use haneul_keys::keypair_file::read_key;
+use haneul_keys::keystore::{AccountKeystore, FileBasedKeystore, Keystore};
+use haneul_move::summary::PackageSummaryMetadata;
+use haneul_move::{self, execute_move_command};
+use haneul_move_build::BuildConfig as HaneulBuildConfig;
+use haneul_package_alt::{HaneulFlavor, find_environment};
+use haneul_pg_db::DbArgs;
+use haneul_pg_db::temp::{LocalDatabase, get_available_port};
+use haneul_protocol_config::Chain;
+use haneul_replay_2 as SR2;
+use haneul_rpc_api::Client;
+use haneul_sdk::haneul_client_config::{HaneulClientConfig, HaneulEnv};
+use haneul_sdk::wallet_context::WalletContext;
+use haneul_swarm::memory::Swarm;
+use haneul_swarm_config::genesis_config::GenesisConfig;
+use haneul_swarm_config::network_config::NetworkConfig;
+use haneul_swarm_config::network_config_builder::ConfigBuilder;
+use haneul_swarm_config::node_config_builder::FullnodeConfigBuilder;
+use haneul_types::base_types::{ObjectID, HaneulAddress};
+use haneul_types::crypto::{SignatureScheme, HaneulKeyPair, ToFromBytes};
+use haneul_types::move_package::MovePackage;
+use tokio::time::interval;
+use tracing::info;
+use url::Url;
+
+use crate::client_commands::{
+    HaneulClientCommands, USER_AGENT, check_for_unpublished_deps,
+    load_root_pkg_for_ephemeral_publish_or_upgrade, load_root_pkg_for_publish_upgrade,
+    pkg_tree_shake,
+};
+use crate::fire_drill::{FireDrill, run_fire_drill};
+use crate::genesis_ceremony::{Ceremony, run};
+use crate::keytool::KeyToolCommand;
+use crate::trace_analysis_commands::AnalyzeTraceCommand;
+use crate::validator_commands::HaneulValidatorCommand;
+
+const DEFAULT_EPOCH_DURATION_MS: u64 = 60_000;
+
+const DEFAULT_FAUCET_GEUNHWA_AMOUNT: u64 = 200_000_000_000; // 200 HANEUL
+const DEFAULT_FAUCET_PORT: u16 = 9123;
+
+const DEFAULT_CONSISTENT_STORE_PORT: u16 = 9124;
+const DEFAULT_GRAPHQL_PORT: u16 = 9125;
+
+#[derive(Args)]
+pub struct RpcArgs {
+    /// Start an indexer with a PostgreSQL database.
+    ///
+    /// Three modes of operation:
+    /// - Not specified: No indexer is started (unless --with-graphql is set)
+    /// - `--with-indexer`: Create/use a temporary database in the network's configuration directory
+    /// - `--with-indexer=<URL>`: Use the provided PostgreSQL database URL
+    ///
+    /// When providing a database URL, use the = sign: `--with-indexer=postgres://user:pass@host:5432/db`
+    #[clap(
+        long,
+        num_args = 0..=1,
+        require_equals = true,
+        value_name = "DATABASE_URL"
+    )]
+    with_indexer: Option<Option<Url>>,
+
+    /// Start a Consistent Store with default host and port: 0.0.0.0:9124. This flag accepts also a
+    /// port, a host, or both (e.g., 0.0.0.0:9124).
+    ///
+    /// When providing a specific value, please use the = sign between the flag and value:
+    /// `--with-consistent-store=9124` or `--with-consistent-store=0.0.0.0`, or `--with-consistent-store=0.0.0.0:9124`
+    /// The Consistent Store will be automatically enabled when `--with-graphql` is set.
+    #[clap(
+        long,
+        default_missing_value = "0.0.0.0:9124",
+        num_args = 0..=1,
+        require_equals = true,
+        value_name = "CONSISTENT_STORE_HOST_PORT"
+    )]
+    with_consistent_store: Option<String>,
+
+    /// Start a GraphQL server with default host and port: 0.0.0.0:9125. This flag accepts also a
+    /// port, a host, or both (e.g., 0.0.0.0:9125).
+    ///
+    /// When providing a specific value, please use the = sign between the flag and value:
+    /// `--with-graphql=9125` or `--with-graphql=0.0.0.0`, or `--with-graphql=0.0.0.0:9125`
+    ///
+    /// Note that GraphQL requires a running indexer and consistent store, which will be enabled
+    /// by default even if those flags are not set.
+    #[clap(
+        long,
+        default_missing_value = "0.0.0.0:9125",
+        num_args = 0..=1,
+        require_equals = true,
+        value_name = "GRAPHQL_HOST_PORT"
+    )]
+    with_graphql: Option<String>,
+}
+
+impl RpcArgs {
+    pub fn for_testing() -> Self {
+        Self {
+            with_indexer: None,
+            with_consistent_store: None,
+            with_graphql: None,
+        }
+    }
+}
+
+#[derive(Parser)]
+#[clap(rename_all = "kebab-case")]
+pub struct HaneulEnvConfig {
+    /// Sets the file storing the state of our user accounts (an empty one will be created if missing)
+    #[clap(long = "client.config")]
+    config: Option<PathBuf>,
+    /// The Haneul environment to use. This must be present in the current config file.
+    #[clap(long = "client.env")]
+    env: Option<String>,
+    /// Create a new haneul config without prompting if none exists
+    #[clap(short = 'y', long = "yes")]
+    accept_defaults: bool,
+}
+
+impl HaneulEnvConfig {
+    pub fn new(config: Option<PathBuf>, env: Option<String>) -> Self {
+        Self {
+            config,
+            env,
+            accept_defaults: false,
+        }
+    }
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Parser)]
+#[clap(rename_all = "kebab-case")]
+pub enum HaneulCommand {
+    /// Start a local network in two modes: saving state between re-runs and not saving state
+    /// between re-runs. Please use (--help) to see the full description.
+    ///
+    /// By default, haneul start will start a local network from the genesis blob that exists in
+    /// the Haneul config default dir or in the config_dir that was passed. If the default directory
+    /// does not exist and the config_dir is not passed, it will generate a new default directory,
+    /// generate the genesis blob, and start the network.
+    ///
+    /// Note that if you want to start an indexer, Postgres DB is required.
+    ///
+    /// ProtocolConfig parameters can be overridden individually by setting env variables as
+    /// follows:
+    /// - HANEUL_PROTOCOL_CONFIG_OVERRIDE_ENABLE=1
+    /// - Then, to configure an override, use the prefix `HANEUL_PROTOCOL_CONFIG_OVERRIDE_`
+    ///   along with the parameter name. For example, to increase the interval between
+    ///   checkpoint creation to >1/s, you might set:
+    ///   HANEUL_PROTOCOL_CONFIG_OVERRIDE_min_checkpoint_interval_ms=1000
+    ///
+    /// Note that ProtocolConfig parameters must match between all nodes, or the network
+    /// may break. Changing these values outside of local networks is very dangerous.
+    #[clap(name = "start", verbatim_doc_comment)]
+    Start {
+        /// Config directory that will be used to store network config, node db, keystore.
+        /// haneul genesis -f --with-faucet generates a genesis config that can be used to start this
+        /// process. Use with caution as the `-f` flag will overwrite the existing config directory.
+        /// We can use any config dir that is generated by the `haneul genesis`.
+        #[clap(long = "network.config")]
+        config_dir: Option<std::path::PathBuf>,
+
+        /// A new genesis is created each time this flag is set, and state is not persisted between
+        /// runs. Only use this flag when you want to start the network from scratch every time you
+        /// run this command.
+        ///
+        /// To run with persisted state, do not pass this flag and use the `haneul genesis` command
+        /// to generate a genesis that can be used to start the network with.
+        #[clap(long)]
+        force_regenesis: bool,
+
+        /// Start a faucet with default host and port: 0.0.0.0:9123. This flag accepts also a
+        /// port, a host, or both (e.g., 0.0.0.0:9123).
+        /// When providing a specific value, please use the = sign between the flag and value:
+        /// `--with-faucet=6124` or `--with-faucet=0.0.0.0`, or `--with-faucet=0.0.0.0:9123`
+        #[clap(
+            long,
+            default_missing_value = "0.0.0.0:9123",
+            num_args = 0..=1,
+            require_equals = true,
+            value_name = "FAUCET_HOST_PORT",
+        )]
+        with_faucet: Option<String>,
+
+        #[clap(flatten)]
+        rpc_args: RpcArgs,
+
+        /// Port to start the Fullnode RPC server on. Default port is 9000.
+        #[clap(long, default_value = "9000")]
+        fullnode_rpc_port: u16,
+
+        /// Set the epoch duration. Can only be used when `--force-regenesis` flag is passed or if
+        /// there's no genesis config and one will be auto-generated. When this flag is not set but
+        /// `--force-regenesis` is set, the epoch duration will be set to 60 seconds.
+        #[clap(long)]
+        epoch_duration_ms: Option<u64>,
+
+        /// Make the fullnode dump executed checkpoints as files to this directory. This is
+        /// incompatible with --no-full-node.
+        ///
+        /// If --with-indexer is set, this defaults to a temporary directory.
+        #[clap(long, value_name = "DATA_INGESTION_DIR")]
+        data_ingestion_dir: Option<PathBuf>,
+
+        /// Start the network without a fullnode
+        #[clap(long = "no-full-node")]
+        no_full_node: bool,
+        /// Set the number of validators in the network. If a genesis was already generated with a
+        /// specific number of validators, this will not override it; the user should recreate the
+        /// genesis with the desired number of validators.
+        #[clap(long)]
+        committee_size: Option<usize>,
+    },
+    #[clap(name = "network")]
+    Network {
+        #[clap(long = "network.config")]
+        config: Option<PathBuf>,
+        #[clap(short, long, help = "Dump the public keys of all authorities")]
+        dump_addresses: bool,
+    },
+    /// Bootstrap and initialize a new haneul network
+    #[clap(name = "genesis")]
+    Genesis {
+        #[clap(long, help = "Start genesis with a given config file")]
+        from_config: Option<PathBuf>,
+        #[clap(
+            long,
+            help = "Build a genesis config, write it to the specified path, and exit"
+        )]
+        write_config: Option<PathBuf>,
+        #[clap(long)]
+        working_dir: Option<PathBuf>,
+        #[clap(short, long, help = "Forces overwriting existing configuration")]
+        force: bool,
+        #[clap(long = "epoch-duration-ms")]
+        epoch_duration_ms: Option<u64>,
+        #[clap(
+            long,
+            value_name = "ADDR",
+            num_args(1..),
+            value_delimiter = ',',
+            help = "A list of ip addresses to generate a genesis suitable for benchmarks"
+        )]
+        benchmark_ips: Option<Vec<String>>,
+        #[clap(
+            long,
+            help = "Creates an extra faucet configuration for haneul persisted runs."
+        )]
+        with_faucet: bool,
+        /// Set number of validators in the network.
+        #[clap(long)]
+        committee_size: Option<usize>,
+    },
+    GenesisCeremony(Ceremony),
+    /// Haneul keystore tool.
+    #[clap(name = "keytool")]
+    KeyTool {
+        #[clap(long)]
+        keystore_path: Option<PathBuf>,
+        ///Return command outputs in json format
+        #[clap(long, global = true)]
+        json: bool,
+        /// Subcommands.
+        #[clap(subcommand)]
+        cmd: KeyToolCommand,
+    },
+    /// Manage keys on external signers
+    ExternalKeys {
+        /// Sets the file storing the state of our user accounts (an empty one will be created if missing)
+        #[clap(long)]
+        keystore_path: Option<PathBuf>,
+        /// Return command outputs in json format
+        #[clap(long, global = true)]
+        json: bool,
+        /// Subcommands.
+        #[clap(subcommand)]
+        cmd: ExternalKeysCommand,
+    },
+    /// Client for interacting with the Haneul network.
+    #[clap(name = "client")]
+    Client {
+        #[clap(flatten)]
+        config: HaneulEnvConfig,
+        #[clap(subcommand)]
+        cmd: Option<HaneulClientCommands>,
+        /// Return command outputs in json format.
+        #[clap(long, global = true)]
+        json: bool,
+    },
+    /// A tool for validators and validator candidates.
+    #[clap(name = "validator")]
+    Validator {
+        /// Sets the file storing the state of our user accounts (an empty one will be created if missing)
+        #[clap(flatten)]
+        config: HaneulEnvConfig,
+        #[clap(subcommand)]
+        cmd: Option<HaneulValidatorCommand>,
+        /// Return command outputs in json format.
+        #[clap(long, global = true)]
+        json: bool,
+    },
+
+    /// Tool to build and test Move applications.
+    #[clap(name = "move")]
+    Move {
+        /// Path to a package which the command should be run with respect to.
+        #[clap(long = "path", short = 'p', global = true)]
+        package_path: Option<PathBuf>,
+        #[clap(flatten)]
+        config: HaneulEnvConfig,
+        /// Package build options
+        #[clap(flatten)]
+        build_config: BuildConfig,
+        /// Subcommands.
+        #[clap(subcommand)]
+        cmd: haneul_move::Command,
+    },
+
+    /// Command to initialize the bridge committee, usually used when
+    /// running local bridge cluster.
+    #[clap(name = "bridge-committee-init")]
+    BridgeInitialize {
+        #[clap(long = "network.config")]
+        network_config: Option<PathBuf>,
+        #[clap(long = "client.config")]
+        client_config: Option<PathBuf>,
+        #[clap(long = "bridge_committee.config")]
+        bridge_committee_config_path: PathBuf,
+    },
+
+    /// Tool for Fire Drill
+    FireDrill {
+        #[clap(subcommand)]
+        fire_drill: FireDrill,
+    },
+
+    /// Invoke Haneul's move-analyzer via CLI
+    #[clap(name = "analyzer", hide = true)]
+    Analyzer,
+
+    /// Analyze and/or transform a trace file
+    #[clap(name = "analyze-trace")]
+    AnalyzeTrace {
+        /// The path to the trace file to analyze
+        #[arg(long, short)]
+        path: PathBuf,
+
+        /// The output directory for any generated artifacts. Defaults `<cur_dir>`
+        #[arg(long, short)]
+        output_dir: Option<PathBuf>,
+
+        #[clap(subcommand)]
+        command: AnalyzeTraceCommand,
+    },
+
+    #[clap(name = "replay")]
+    ReplayTransaction {
+        #[clap(flatten)]
+        config: HaneulEnvConfig,
+
+        #[command(flatten)]
+        replay_config: SR2::ReplayConfigStable,
+    },
+
+    /// Generate shell completion scripts for CLI
+    #[clap(name = "completion")]
+    Completion {
+        /// If provided, outputs the completion file for given shell
+        #[arg(long = "generate", value_enum)]
+        generator: clap_complete::Shell,
+    },
+}
+
+impl HaneulCommand {
+    pub async fn execute(self) -> Result<(), anyhow::Error> {
+        match self {
+            HaneulCommand::Network {
+                config,
+                dump_addresses,
+            } => {
+                let config_path = config.unwrap_or(haneul_config_dir()?.join(HANEUL_NETWORK_CONFIG));
+                let config: NetworkConfig = PersistedConfig::read(&config_path).map_err(|err| {
+                    err.context(format!(
+                        "Cannot open Haneul network config file at {:?}",
+                        config_path
+                    ))
+                })?;
+
+                if dump_addresses {
+                    for validator in config.validator_configs() {
+                        println!(
+                            "{} - {}",
+                            validator.network_address(),
+                            validator.protocol_key_pair().public(),
+                        );
+                    }
+                }
+                Ok(())
+            }
+            HaneulCommand::Start {
+                config_dir,
+                force_regenesis,
+                with_faucet,
+                rpc_args,
+                fullnode_rpc_port,
+                data_ingestion_dir,
+                no_full_node,
+                epoch_duration_ms,
+                committee_size,
+            } => {
+                start(
+                    config_dir.clone(),
+                    with_faucet,
+                    rpc_args,
+                    force_regenesis,
+                    epoch_duration_ms,
+                    fullnode_rpc_port,
+                    data_ingestion_dir,
+                    no_full_node,
+                    committee_size,
+                )
+                .await?;
+
+                Ok(())
+            }
+            HaneulCommand::Genesis {
+                working_dir,
+                force,
+                from_config,
+                write_config,
+                epoch_duration_ms,
+                benchmark_ips,
+                with_faucet,
+                committee_size,
+            } => {
+                genesis(
+                    from_config,
+                    write_config,
+                    working_dir,
+                    force,
+                    epoch_duration_ms,
+                    benchmark_ips,
+                    with_faucet,
+                    committee_size,
+                )
+                .await
+            }
+            HaneulCommand::GenesisCeremony(cmd) => run(cmd),
+            HaneulCommand::KeyTool {
+                keystore_path: _,
+                json,
+                cmd,
+            } => {
+                let config_path = haneul_config_dir()?.join(HANEUL_CLIENT_CONFIG);
+                let mut context = WalletContext::new(&config_path)?;
+
+                cmd.execute(&mut context).await?.print(!json);
+                Ok(())
+            }
+            HaneulCommand::ExternalKeys {
+                keystore_path: _,
+                json,
+                cmd,
+            } => {
+                let client_path = haneul_config_dir()?.join(HANEUL_CLIENT_CONFIG);
+                let mut config = PersistedConfig::<HaneulClientConfig>::read(&client_path)?;
+
+                cmd.execute(config.external_keys.as_mut())
+                    .await?
+                    .print(!json);
+                Ok(())
+            }
+            HaneulCommand::Client { config, cmd, json } => {
+                if let Some(cmd) = cmd {
+                    let mut context = get_wallet_context(&config).await?;
+                    cmd.execute(&mut context).await?.print(!json);
+                } else {
+                    // Print help
+                    let mut app: Command = HaneulCommand::command();
+                    app.build();
+                    app.find_subcommand_mut("client").unwrap().print_help()?;
+                }
+                Ok(())
+            }
+            HaneulCommand::Validator { config, cmd, json } => {
+                let mut context = get_wallet_context(&config).await?;
+                if let Some(cmd) = cmd {
+                    cmd.execute(&mut context).await?.print(!json);
+                } else {
+                    // Print help
+                    let mut app: Command = HaneulCommand::command();
+                    app.build();
+                    app.find_subcommand_mut("validator").unwrap().print_help()?;
+                }
+                Ok(())
+            }
+            HaneulCommand::Move {
+                package_path,
+                build_config,
+                cmd,
+                config: client_config,
+            } => {
+                let context = get_wallet_context(&client_config).await?;
+
+                match cmd {
+                    haneul_move::Command::Summary(mut s) if s.package_id.is_some() => {
+                        let (_, client) = get_chain_id_and_client(
+                            client_config,
+                            "haneul move summary --package-id <object_id>",
+                        )
+                        .await?;
+                        let Some(mut client) = client else {
+                            bail!(
+                                "`haneul move summary --package-id <object_id>` requires a configured network"
+                            );
+                        };
+
+                        // If they didn't run with `--bytecode` correct this for them but warn them
+                        // to let them know that we are changing it.
+                        if !s.summary.bytecode {
+                            eprintln!("{}",
+                            "[warning] `haneul move summary --package-id <object_id>` only supports bytecode summaries. \
+                             Falling back to producing a bytecode-based summary. To not get this warning you can run with `--bytecode`".yellow().bold()
+                            );
+                            s.summary.bytecode = true;
+                        }
+                        let root_package_id = s
+                            .package_id
+                            .as_ref()
+                            .expect("Safe since we checked in the match statement");
+
+                        // Create a tempdir to download the package bytes to, and then download the
+                        // packages bytes there.
+                        let package_bytes_location = tempdir()?;
+                        let path = package_bytes_location.path();
+                        let package_metadata =
+                            download_package_and_deps_under(&mut client, path, *root_package_id)
+                                .await?;
+
+                        // Now produce the summary, pointing at the tempdir containing the package
+                        // bytes.
+                        execute_move_command(
+                            Some(path),
+                            build_config,
+                            haneul_move::Command::Summary(s),
+                            Some(haneul_move::CommandMeta::Summary(package_metadata)),
+                            &context,
+                        )
+                        .await?;
+                        Ok(())
+                    }
+                    haneul_move::Command::Build(ref build) if build.dump_bytecode_as_base64 => {
+                        // Resolve pubfile_path to absolute before reroot_path changes CWD
+                        let pubfile_path = build_config.pubfile_path.as_ref().map(|p| {
+                            if p.is_absolute() {
+                                p.clone()
+                            } else {
+                                std::env::current_dir()
+                                    .expect("failed to get current directory")
+                                    .join(p)
+                            }
+                        });
+
+                        let rerooted_path = move_cli::base::reroot_path(package_path.as_deref())?;
+
+                        let with_unpublished_deps = build.with_unpublished_dependencies;
+                        let environment = find_environment(
+                            &rerooted_path,
+                            build_config.environment.clone(),
+                            &context,
+                        )
+                        .await?;
+
+                        let mut root_pkg = if let Some(pubfile_path) = pubfile_path {
+                            let chain_id = context
+                                .grpc_client()?
+                                .get_chain_identifier()
+                                .await?
+                                .to_string();
+                            let modes = build_config.mode_set();
+                            load_root_pkg_for_ephemeral_publish_or_upgrade(
+                                &rerooted_path,
+                                &chain_id,
+                                build_config.environment.clone(),
+                                pubfile_path,
+                                modes,
+                            )
+                            .await?
+                        } else {
+                            load_root_pkg_for_publish_upgrade(
+                                &context,
+                                &build_config,
+                                &rerooted_path,
+                            )
+                            .await?
+                        };
+
+                        if !with_unpublished_deps {
+                            let _ = check_for_unpublished_deps(&root_pkg, with_unpublished_deps)?;
+                        }
+
+                        // explicitly tell the compiler to set unpublished dependencies' addresses
+                        // to 0x0
+                        let mut config = build_config.clone();
+                        config.set_unpublished_deps_to_zero = with_unpublished_deps;
+                        config.root_as_zero = true;
+
+                        let mut pkg = HaneulBuildConfig {
+                            config,
+                            run_bytecode_verifier: true,
+                            print_diags_to_stderr: true,
+                            environment,
+                        }
+                        .build_async_from_root_pkg(&mut root_pkg)
+                        .await?;
+
+                        if !build.no_tree_shaking {
+                            let client = context.grpc_client()?;
+                            pkg_tree_shake(client, with_unpublished_deps, &mut pkg).await?;
+                        }
+
+                        println!(
+                            "{}",
+                            json!({
+                                "modules": pkg.get_package_base64(with_unpublished_deps),
+                                "dependencies": pkg.get_dependency_storage_package_ids(),
+                                "digest": pkg.get_package_digest(with_unpublished_deps),
+                            })
+                        );
+                        Ok(())
+                    }
+                    _ => {
+                        execute_move_command(
+                            package_path.as_deref(),
+                            build_config,
+                            cmd,
+                            None,
+                            &context,
+                        )
+                        .await
+                    }
+                }
+            }
+            HaneulCommand::BridgeInitialize {
+                network_config,
+                client_config,
+                bridge_committee_config_path,
+            } => {
+                // Load the config of the Haneul authority.
+                let network_config_path = network_config
+                    .clone()
+                    .unwrap_or(haneul_config_dir()?.join(HANEUL_NETWORK_CONFIG));
+                let network_config: NetworkConfig = PersistedConfig::read(&network_config_path)
+                    .map_err(|err| {
+                        err.context(format!(
+                            "Cannot open Haneul network config file at {:?}",
+                            network_config_path
+                        ))
+                    })?;
+                let bridge_committee_config: BridgeCommitteeConfig =
+                    PersistedConfig::read(&bridge_committee_config_path).map_err(|err| {
+                        err.context(format!(
+                            "Cannot open Bridge Committee config file at {:?}",
+                            bridge_committee_config_path
+                        ))
+                    })?;
+
+                let config_path =
+                    client_config.unwrap_or(haneul_config_dir()?.join(HANEUL_CLIENT_CONFIG));
+                let mut context = WalletContext::new(&config_path)?;
+                let rgp = context.get_reference_gas_price().await?;
+                let rpc_url = &context.get_active_env()?.rpc;
+                let bridge_metrics = Arc::new(BridgeMetrics::new_for_testing());
+                let haneul_bridge_client = HaneulBridgeClient::new(rpc_url, bridge_metrics).await?;
+                let bridge_arg = haneul_bridge_client
+                    .get_mutable_bridge_object_arg_must_succeed()
+                    .await;
+                assert_eq!(
+                    network_config.validator_configs().len(),
+                    bridge_committee_config
+                        .bridge_authority_port_and_key_path
+                        .len()
+                );
+                for node_config in network_config.validator_configs() {
+                    let account_kp = node_config.account_key_pair.keypair();
+                    context.add_account(None, account_kp.copy()).await;
+                }
+
+                let context = context;
+                let mut tasks = vec![];
+                for (node_config, (port, key_path)) in network_config
+                    .validator_configs()
+                    .iter()
+                    .zip(bridge_committee_config.bridge_authority_port_and_key_path)
+                {
+                    let account_kp = node_config.account_key_pair.keypair();
+                    let haneul_address = HaneulAddress::from(&account_kp.public());
+                    let gas_obj_ref = context
+                        .get_one_gas_object_owned_by_address(haneul_address)
+                        .await?
+                        .expect("Validator does not own any gas objects");
+                    let kp = match read_key(&key_path, true)? {
+                        HaneulKeyPair::Secp256k1(key) => key,
+                        _ => unreachable!("we required secp256k1 key in `read_key`"),
+                    };
+
+                    // build registration tx
+                    let tx = build_committee_register_transaction(
+                        haneul_address,
+                        &gas_obj_ref,
+                        bridge_arg,
+                        kp.public().as_bytes().to_vec(),
+                        &format!("http://127.0.0.1:{port}"),
+                        rgp,
+                        1000000000,
+                    )
+                    .unwrap();
+                    let signed_tx = context.sign_transaction(&tx).await;
+                    tasks.push(context.execute_transaction_must_succeed(signed_tx));
+                }
+                future::join_all(tasks).await;
+                Ok(())
+            }
+            HaneulCommand::FireDrill { fire_drill } => run_fire_drill(fire_drill).await,
+            HaneulCommand::Analyzer => {
+                analyzer::run::<HaneulFlavor>(Some(Flavor::Haneul));
+                Ok(())
+            }
+            HaneulCommand::AnalyzeTrace {
+                path,
+                output_dir,
+                command,
+            } => command.execute(path, output_dir).await,
+            HaneulCommand::ReplayTransaction {
+                config,
+                replay_config,
+            } => {
+                let mut context = get_wallet_context(&config).await?;
+                if let Some(env_override) = config.env {
+                    context = context.with_env_override(env_override);
+                }
+
+                let node = get_replay_node(&context).await?;
+                let file_config = SR2::load_config_file()?;
+                let stable_config = SR2::merge_configs(replay_config, file_config);
+                let experimental_config = SR2::ReplayConfigExperimental {
+                    node,
+                    ..Default::default()
+                };
+
+                let artifact_path =
+                    SR2::handle_replay_config(&stable_config, &experimental_config, USER_AGENT)
+                        .await?;
+
+                if let Some(digest) = &stable_config.digest {
+                    SR2::print_effects_or_fork(
+                        digest,
+                        &artifact_path,
+                        stable_config.show_effects,
+                        &mut std::io::stdout(),
+                    )?;
+                }
+
+                Ok(())
+            }
+            HaneulCommand::Completion { generator } => {
+                let mut app: Command = HaneulCommand::command();
+                let name = app.get_name().to_string();
+                clap_complete::generate(generator, &mut app, name, &mut std::io::stdout());
+                Ok(())
+            }
+        }
+    }
+}
+
+/// Starts a local network with the given configuration.
+async fn start(
+    config: Option<PathBuf>,
+    with_faucet: Option<String>,
+    rpc_args: RpcArgs,
+    force_regenesis: bool,
+    epoch_duration_ms: Option<u64>,
+    fullnode_rpc_port: u16,
+    mut data_ingestion_dir: Option<PathBuf>,
+    no_full_node: bool,
+    committee_size: Option<usize>,
+) -> Result<(), anyhow::Error> {
+    if force_regenesis {
+        ensure!(
+            config.is_none(),
+            "Cannot pass `--force-regenesis` and `--network.config` at the same time."
+        );
+    }
+
+    let RpcArgs {
+        with_indexer,
+        mut with_consistent_store,
+        with_graphql,
+    } = rpc_args;
+
+    // Automatically enable consistent store if GraphQL is enabled
+    if with_graphql.is_some() && with_consistent_store.is_none() {
+        with_consistent_store = Some("0.0.0.0:9124".to_string());
+    }
+
+    // Automatically enable indexer if GraphQL is enabled
+    // If with_indexer is None but with_graphql is Some, default to temporary database (Some(None))
+    let with_indexer = match (with_indexer, with_graphql.is_some()) {
+        (Some(db_url), _) => Some(db_url),
+        (None, true) => Some(None),
+        (None, false) => None,
+    };
+
+    if with_indexer.is_some() {
+        ensure!(
+            !no_full_node,
+            "Cannot start the indexer without a fullnode."
+        );
+    }
+
+    if epoch_duration_ms.is_some() && genesis_blob_exists(config.clone()) && !force_regenesis {
+        bail!(
+            "Epoch duration can only be set when passing the `--force-regenesis` flag, or when \
+            there is no genesis configuration in the default Haneul configuration folder or the given \
+            network.config argument.",
+        );
+    }
+
+    let mut swarm_builder = Swarm::builder();
+
+    // If this is set, then no data will be persisted between runs, and a new genesis will be
+    // generated each run.
+    let config_dir = if force_regenesis {
+        let committee_size = match committee_size {
+            Some(x) => NonZeroUsize::new(x),
+            None => NonZeroUsize::new(1),
+        }
+        .ok_or_else(|| anyhow!("Committee size must be at least 1."))?;
+        swarm_builder = swarm_builder.committee_size(committee_size);
+        let genesis_config = GenesisConfig::custom_genesis(1, 100);
+        swarm_builder = swarm_builder.with_genesis_config(genesis_config);
+        let epoch_duration_ms = epoch_duration_ms.unwrap_or(DEFAULT_EPOCH_DURATION_MS);
+        swarm_builder = swarm_builder.with_epoch_duration_ms(epoch_duration_ms);
+        haneullabs_common::tempdir()?.keep()
+    } else {
+        // If the config path looks like a YAML file, it is treated as if it is the network.yaml
+        // overriding the network.yaml found in the haneul config directry. Otherwise it is treated as
+        // the haneul config directory for backwards compatibility with `haneul-test-validator`.
+        let (network_config_path, haneul_config_path) = match config {
+            Some(config)
+                if config.is_file()
+                    && config
+                        .extension()
+                        .is_some_and(|e| e == "yml" || e == "yaml") =>
+            {
+                if committee_size.is_some() {
+                    eprintln!(
+                        "{}",
+                        "[warning] The committee-size arg wil be ignored as a network \
+                            configuration already exists. To change the committee-size, you'll \
+                            have to adjust the network configuration file or regenerate a genesis \
+                            with the desired committee size. See `haneul genesis --help` for more \
+                            information."
+                            .yellow()
+                            .bold()
+                    );
+                }
+                (config, haneul_config_dir()?)
+            }
+
+            Some(config) => {
+                if committee_size.is_some() {
+                    eprintln!(
+                        "{}",
+                        "[warning] The committee-size arg wil be ignored as a network \
+                            configuration already exists. To change the committee-size, you'll \
+                            have to adjust the network configuration file or regenerate a genesis \
+                            with the desired committee size. See `haneul genesis --help` for more \
+                            information."
+                            .yellow()
+                            .bold()
+                    );
+                }
+                (config.join(HANEUL_NETWORK_CONFIG), config)
+            }
+
+            None => {
+                let haneul_config = haneul_config_dir()?;
+                let network_config = haneul_config.join(HANEUL_NETWORK_CONFIG);
+
+                if !network_config.exists() {
+                    genesis(
+                        None,
+                        None,
+                        None,
+                        false,
+                        epoch_duration_ms,
+                        None,
+                        false,
+                        committee_size,
+                    )
+                    .await
+                    .map_err(|_| {
+                        anyhow!(
+                            "Cannot run genesis with non-empty Haneul config directory: {}.\n\n\
+                                If you are trying to run a local network without persisting the \
+                                data (so a new genesis that is randomly generated and will not be \
+                                saved once the network is shut down), use --force-regenesis flag.\n\
+                                If you are trying to persist the network data and start from a new \
+                                genesis, use haneul genesis --help to see how to generate a new \
+                                genesis.",
+                            haneul_config.display(),
+                        )
+                    })?;
+                } else if committee_size.is_some() {
+                    eprintln!(
+                        "{}",
+                        "[warning] The committee-size arg wil be ignored as a network \
+                            configuration already exists. To change the committee-size, you'll \
+                            have to adjust the network configuration file or regenerate a genesis \
+                            with the desired committee size. See `haneul genesis --help` for more \
+                            information."
+                            .yellow()
+                            .bold()
+                    );
+                }
+
+                (network_config, haneul_config)
+            }
+        };
+
+        // Load the config of the Haneul authority.
+        let network_config: NetworkConfig =
+            PersistedConfig::read(&network_config_path).map_err(|err| {
+                err.context(format!(
+                    "Cannot open Haneul network config file at {:?}",
+                    network_config_path
+                ))
+            })?;
+
+        swarm_builder = swarm_builder
+            .dir(haneul_config_path.clone())
+            .with_network_config(network_config);
+
+        haneul_config_path
+    };
+
+    // the indexer requires to set the fullnode's data ingestion directory
+    // note that this overrides the default configuration that is set when running the genesis
+    // command, which sets data_ingestion_dir to None.
+    if with_indexer.is_some() && data_ingestion_dir.is_none() {
+        data_ingestion_dir = Some(haneullabs_common::tempdir()?.keep())
+    }
+
+    if let Some(ref dir) = data_ingestion_dir {
+        swarm_builder = swarm_builder.with_data_ingestion_dir(dir.clone());
+    }
+
+    let mut fullnode_rpc_address = haneul_config::node::default_json_rpc_address();
+    fullnode_rpc_address.set_port(fullnode_rpc_port);
+
+    if no_full_node {
+        swarm_builder = swarm_builder.with_fullnode_count(0);
+    } else {
+        let rpc_config = haneul_config::RpcConfig {
+            enable_indexing: Some(true),
+            ..Default::default()
+        };
+
+        swarm_builder = swarm_builder
+            .with_fullnode_count(1)
+            .with_fullnode_rpc_addr(fullnode_rpc_address)
+            .with_fullnode_rpc_config(rpc_config);
+    }
+
+    let mut swarm = swarm_builder.build();
+    swarm.launch().await?;
+    // Let nodes connect to one another
+    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+    info!("Cluster started");
+
+    let fullnode_rpc_url = socket_addr_to_url(fullnode_rpc_address)?
+        .to_string()
+        .trim_end_matches("/")
+        .to_string();
+    info!("Fullnode RPC URL: {fullnode_rpc_url}");
+
+    let prometheus_registry = Registry::new();
+    let mut rpc_services = Service::new();
+
+    // Set-up the database for the indexer, if needed
+    let (_database, database_url) = match with_indexer {
+        None => (None, None),
+
+        // Temporary (local) database in config directory
+        Some(None) => {
+            let pg_dir = config_dir.join("indexer");
+            let port = get_available_port();
+
+            info!("Starting local PostgreSQL database at {pg_dir:?} on port {port}");
+
+            let db = if pg_dir.exists() {
+                LocalDatabase::new(pg_dir, port)
+                    .context("Failed to start local PostgreSQL database")?
+            } else {
+                LocalDatabase::new_initdb(pg_dir, port)
+                    .context("Failed to initialize and start local PostgreSQL database")?
+            };
+
+            let url = db.url().clone();
+            info!("Starting indexer with local database");
+            (Some(db), Some(url))
+        }
+
+        // Use provided database URL
+        Some(Some(url)) => {
+            info!("Starting indexer with provided database");
+            (None, Some(url))
+        }
+    };
+
+    let pipelines = if let Some(ref db_url) = database_url {
+        let client_args = ClientArgs {
+            ingestion: IngestionClientArgs {
+                local_ingestion_path: data_ingestion_dir.clone(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let indexer = setup_indexer(
+            db_url.clone(),
+            DbArgs::default(),
+            IndexerArgs::default(),
+            client_args,
+            IndexerConfig::for_test(),
+            None,
+            &prometheus_registry,
+        )
+        .await
+        .context("Failed to setup indexer")?;
+
+        let pipelines = indexer.pipelines().map(|s| s.to_string()).collect();
+        rpc_services = rpc_services.merge(indexer.run().await.context("Failed to start indexer")?);
+
+        info!("Indexer started with pipelines: {pipelines:?}");
+        pipelines
+    } else {
+        vec![]
+    };
+
+    let consistent_store_url = if let Some(input) = with_consistent_store {
+        let address = parse_host_port(input, DEFAULT_CONSISTENT_STORE_PORT)
+            .context("Invalid consistent store host and port")?;
+
+        let client_args = ClientArgs {
+            ingestion: IngestionClientArgs {
+                local_ingestion_path: data_ingestion_dir.clone(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let consistent_args = ConsistentArgs {
+            rpc_listen_address: address,
+            ..Default::default()
+        };
+
+        rpc_services = rpc_services.merge(
+            start_consistent_store(
+                config_dir.join("consistent_store"),
+                IndexerArgs::default(),
+                client_args,
+                consistent_args,
+                "0.0.0",
+                ConsistentConfig::for_test(),
+                &prometheus_registry,
+            )
+            .await
+            .context("Failed to start Consistent Store")?,
+        );
+
+        info!("Consistent Store started at {address}");
+        Some(address)
+    } else {
+        None
+    };
+
+    if let Some(input) = with_graphql {
+        let address = parse_host_port(input, DEFAULT_GRAPHQL_PORT)
+            .context("Invalid graphql host and port")?;
+
+        info!("Starting the GraphQL service at {address}");
+
+        let graphql_args = GraphQlArgs {
+            rpc_listen_address: address,
+            no_ide: false,
+        };
+
+        let consistent_store_url = consistent_store_url.map(socket_addr_to_url).transpose()?;
+        let consistent_reader_args = ConsistentReaderArgs {
+            consistent_store_url,
+            ..Default::default()
+        };
+
+        let fullnode_args = FullnodeArgs {
+            fullnode_rpc_url: Some(fullnode_rpc_url.clone()),
+        };
+
+        let mut graphql_config = GraphQlConfig::default();
+        graphql_config.zklogin.env = haneul_indexer_alt_graphql::config::ZkLoginEnv::Test;
+
+        rpc_services = rpc_services.merge(
+            start_graphql(
+                database_url.clone(),
+                fullnode_args,
+                DbArgs::default(),
+                GraphQlKvArgs::default(),
+                consistent_reader_args,
+                graphql_args,
+                SystemPackageTaskArgs::default(),
+                "0.0.0",
+                graphql_config,
+                pipelines,
+                &prometheus_registry,
+            )
+            .await
+            .context("Failed to start GraphQL server")?,
+        );
+
+        info!("GraphQL started at {address}");
+    }
+
+    // Update the wallet_context with the configured fullnode rpc url so client operations will
+    // succeed if a non-default port was provided.
+
+    if config_dir.join(HANEUL_CLIENT_CONFIG).exists() {
+        let _ = update_wallet_config_rpc(config_dir.clone(), fullnode_rpc_url.clone())?;
+    }
+
+    if force_regenesis && haneul_config_dir()?.join(HANEUL_CLIENT_CONFIG).exists() {
+        let _ = update_wallet_config_rpc(haneul_config_dir()?, fullnode_rpc_url.clone())?;
+    }
+
+    if let Some(input) = with_faucet {
+        let faucet_address = parse_host_port(input, DEFAULT_FAUCET_PORT)
+            .map_err(|_| anyhow!("Invalid faucet host and port"))?;
+
+        info!("Starting the faucet service at {faucet_address}");
+
+        let host_ip = match faucet_address {
+            SocketAddr::V4(addr) => *addr.ip(),
+            _ => bail!("Faucet configuration requires an IPv4 address"),
+        };
+
+        let config = FaucetConfig {
+            host_ip,
+            port: faucet_address.port(),
+            amount: DEFAULT_FAUCET_GEUNHWA_AMOUNT,
+            ..Default::default()
+        };
+
+        if force_regenesis {
+            let kp = swarm.config_mut().account_keys.swap_remove(0);
+            let keystore_path = config_dir.join(HANEUL_KEYSTORE_FILENAME);
+            let mut keystore =
+                Keystore::from(FileBasedKeystore::load_or_create(&keystore_path).unwrap());
+            let address: HaneulAddress = kp.public().into();
+            keystore
+                .import(None, HaneulKeyPair::Ed25519(kp))
+                .await
+                .unwrap();
+
+            HaneulClientConfig {
+                keystore,
+                external_keys: None,
+                envs: vec![HaneulEnv {
+                    alias: "localnet".to_string(),
+                    rpc: fullnode_rpc_url.clone(),
+                    ws: None,
+                    basic_auth: None,
+                    chain_id: None,
+                }],
+                active_address: Some(address),
+                active_env: Some("localnet".to_string()),
+            }
+            .persisted(config_dir.join(HANEUL_CLIENT_CONFIG).as_path())
+            .save()
+            .unwrap();
+        }
+
+        let local_faucet = LocalFaucet::new(
+            create_wallet_context(config.wallet_client_timeout_secs, config_dir.clone())?,
+            config.clone(),
+        )
+        .await?;
+
+        let app_state = Arc::new(AppState {
+            faucet: local_faucet,
+            config,
+        });
+
+        start_faucet(app_state).await?;
+    }
+
+    // Run health check loop until Ctrl+C or failure
+    let mut interval = interval(Duration::from_secs(3));
+    let mut unhealthy = 0;
+
+    loop {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                info!("Received Ctrl+C, shutting down...");
+                break;
+            }
+            _ = interval.tick() => {}
+        }
+
+        for node in swarm.validator_nodes() {
+            let Err(e) = node.health_check(true).await else {
+                unhealthy = 0;
+                break;
+            };
+
+            unhealthy += 1;
+            if unhealthy > 3 {
+                return Err(e.into());
+            }
+        }
+    }
+
+    info!("Shutting down RPC services...");
+    rpc_services.shutdown().await?;
+    Ok(())
+}
+
+async fn genesis(
+    from_config: Option<PathBuf>,
+    write_config: Option<PathBuf>,
+    working_dir: Option<PathBuf>,
+    force: bool,
+    epoch_duration_ms: Option<u64>,
+    benchmark_ips: Option<Vec<String>>,
+    with_faucet: bool,
+    committee_size: Option<usize>,
+) -> Result<(), anyhow::Error> {
+    let haneul_config_dir = &match working_dir {
+        // if a directory is specified, it must exist (it
+        // will not be created)
+        Some(v) => v,
+        // create default Haneul config dir if not specified
+        // on the command line and if it does not exist
+        // yet
+        None => {
+            let config_path = haneul_config_dir()?;
+            fs::create_dir_all(&config_path)?;
+            config_path
+        }
+    };
+
+    // if Haneul config dir is not empty then either clean it
+    // up (if --force/-f option was specified or report an
+    // error
+    let dir = haneul_config_dir.read_dir().map_err(|err| {
+        anyhow!(err).context(format!("Cannot open Haneul config dir {:?}", haneul_config_dir))
+    })?;
+    let files = dir.collect::<Result<Vec<_>, _>>()?;
+
+    let client_path = haneul_config_dir.join(HANEUL_CLIENT_CONFIG);
+    let keystore_path = haneul_config_dir.join(HANEUL_KEYSTORE_FILENAME);
+
+    if write_config.is_none() && !files.is_empty() {
+        if force {
+            // check old keystore and client.yaml is compatible
+            let is_compatible = FileBasedKeystore::load_or_create(&keystore_path).is_ok()
+                && PersistedConfig::<HaneulClientConfig>::read(&client_path).is_ok();
+            // Keep keystore and client.yaml if they are compatible
+            if is_compatible {
+                for file in files {
+                    let path = file.path();
+                    if path != client_path && path != keystore_path {
+                        if path.is_file() {
+                            fs::remove_file(path)
+                        } else {
+                            fs::remove_dir_all(path)
+                        }
+                        .map_err(|err| {
+                            anyhow!(err).context(format!("Cannot remove file {:?}", file.path()))
+                        })?;
+                    }
+                }
+            } else {
+                fs::remove_dir_all(haneul_config_dir).map_err(|err| {
+                    anyhow!(err)
+                        .context(format!("Cannot remove Haneul config dir {:?}", haneul_config_dir))
+                })?;
+                fs::create_dir(haneul_config_dir).map_err(|err| {
+                    anyhow!(err)
+                        .context(format!("Cannot create Haneul config dir {:?}", haneul_config_dir))
+                })?;
+            }
+        } else if files.len() != 2 || !client_path.exists() || !keystore_path.exists() {
+            bail!(
+                "Cannot run genesis with non-empty Haneul config directory {}, please use the --force/-f option to remove the existing configuration",
+                haneul_config_dir.to_str().unwrap()
+            );
+        }
+    }
+
+    let network_path = haneul_config_dir.join(HANEUL_NETWORK_CONFIG);
+    let genesis_path = haneul_config_dir.join(HANEUL_GENESIS_FILENAME);
+
+    let mut genesis_conf = match from_config {
+        Some(path) => PersistedConfig::read(&path)?,
+        None => {
+            if let Some(ips) = benchmark_ips {
+                // Make a keystore containing the key for the genesis gas object.
+                let path = haneul_config_dir.join(HANEUL_BENCHMARK_GENESIS_GAS_KEYSTORE_FILENAME);
+                let mut keystore = FileBasedKeystore::load_or_create(&path)?;
+                for gas_key in GenesisConfig::benchmark_gas_keys(ips.len()) {
+                    keystore.import(None, gas_key).await?;
+                }
+                keystore.save().await?;
+
+                // Make a new genesis config from the provided ip addresses.
+                GenesisConfig::new_for_benchmarks(&ips)
+            } else if keystore_path.exists() {
+                let existing_keys = FileBasedKeystore::load_or_create(&keystore_path)?.addresses();
+                GenesisConfig::for_local_testing_with_addresses(existing_keys)
+            } else {
+                GenesisConfig::for_local_testing()
+            }
+        }
+    };
+
+    // Adds an extra faucet account to the genesis
+    if with_faucet {
+        info!("Adding faucet account in genesis config...");
+        genesis_conf = genesis_conf.add_faucet_account();
+    }
+
+    if let Some(path) = write_config {
+        let persisted = genesis_conf.persisted(&path);
+        persisted.save()?;
+        return Ok(());
+    }
+
+    let validator_info = genesis_conf.validator_config_info.take();
+    let ssfn_info = genesis_conf.ssfn_config_info.take();
+
+    let builder = ConfigBuilder::new(haneul_config_dir);
+    if let Some(epoch_duration_ms) = epoch_duration_ms {
+        genesis_conf.parameters.epoch_duration_ms = epoch_duration_ms;
+    }
+    let committee_size = match committee_size {
+        Some(x) => NonZeroUsize::new(x),
+        None => NonZeroUsize::new(1),
+    }
+    .ok_or_else(|| anyhow!("Committee size must be at least 1."))?;
+
+    let mut network_config = if let Some(validators) = validator_info {
+        builder
+            .with_genesis_config(genesis_conf)
+            .with_validators(validators)
+            .build()
+    } else {
+        builder
+            .committee_size(committee_size)
+            .with_genesis_config(genesis_conf)
+            .build()
+    };
+
+    let mut keystore = FileBasedKeystore::load_or_create(&keystore_path)?;
+    for key in &network_config.account_keys {
+        keystore
+            .import(None, HaneulKeyPair::Ed25519(key.copy()))
+            .await?;
+    }
+    let active_address = keystore.addresses().pop();
+
+    network_config.genesis.save(&genesis_path)?;
+    for validator in &mut network_config.validator_configs {
+        validator.genesis = haneul_config::node::Genesis::new_from_file(&genesis_path);
+    }
+
+    info!("Network genesis completed.");
+    network_config.save(&network_path)?;
+    info!("Network config file is stored in {:?}.", network_path);
+
+    info!("Client keystore is stored in {:?}.", keystore_path);
+
+    let fullnode_config = FullnodeConfigBuilder::new()
+        .with_config_directory(FULL_NODE_DB_PATH.into())
+        .with_rpc_addr(haneul_config::node::default_json_rpc_address())
+        .build(&mut OsRng, &network_config);
+
+    fullnode_config.save(haneul_config_dir.join(HANEUL_FULLNODE_CONFIG))?;
+    let mut ssfn_nodes = vec![];
+    if let Some(ssfn_info) = ssfn_info {
+        for (i, ssfn) in ssfn_info.into_iter().enumerate() {
+            let path =
+                haneul_config_dir.join(haneul_config::ssfn_config_file(ssfn.p2p_address.clone(), i));
+            // join base fullnode config with each SsfnGenesisConfig entry
+            let ssfn_config = FullnodeConfigBuilder::new()
+                .with_config_directory(FULL_NODE_DB_PATH.into())
+                .with_p2p_external_address(ssfn.p2p_address)
+                .with_network_key_pair(ssfn.network_key_pair)
+                .with_p2p_listen_address("0.0.0.0:8084".parse().unwrap())
+                .with_db_path(PathBuf::from("/opt/haneul/db/authorities_db/full_node_db"))
+                .with_network_address("/ip4/0.0.0.0/tcp/8080/http".parse().unwrap())
+                .with_metrics_address("0.0.0.0:9184".parse().unwrap())
+                .with_admin_interface_port(1337)
+                .with_json_rpc_address("0.0.0.0:9000".parse().unwrap())
+                .with_genesis(Genesis::new_from_file("/opt/haneul/config/genesis.blob"))
+                .build(&mut OsRng, &network_config);
+            ssfn_nodes.push(ssfn_config.clone());
+            ssfn_config.save(path)?;
+        }
+
+        let ssfn_seed_peers: Vec<SeedPeer> = ssfn_nodes
+            .iter()
+            .map(|config| SeedPeer {
+                peer_id: Some(anemo::PeerId(
+                    config.network_key_pair().public().0.to_bytes(),
+                )),
+                address: config.p2p_config.external_address.clone().unwrap(),
+            })
+            .collect();
+
+        for (i, mut validator) in network_config
+            .into_validator_configs()
+            .into_iter()
+            .enumerate()
+        {
+            let path = haneul_config_dir.join(haneul_config::validator_config_file(
+                validator.network_address.clone(),
+                i,
+            ));
+            let mut val_p2p = validator.p2p_config.clone();
+            val_p2p.seed_peers = ssfn_seed_peers.clone();
+            validator.p2p_config = val_p2p;
+            validator.save(path)?;
+        }
+    } else {
+        for (i, validator) in network_config
+            .into_validator_configs()
+            .into_iter()
+            .enumerate()
+        {
+            let path = haneul_config_dir.join(haneul_config::validator_config_file(
+                validator.network_address.clone(),
+                i,
+            ));
+            validator.save(path)?;
+        }
+    }
+
+    let mut client_config = if client_path.exists() {
+        PersistedConfig::read(&client_path)?
+    } else {
+        HaneulClientConfig::new(keystore.into())
+    };
+
+    if client_config.active_address.is_none() {
+        client_config.active_address = active_address;
+    }
+
+    let rpc = socket_addr_to_url(fullnode_config.json_rpc_address)?
+        .to_string()
+        .trim_end_matches("/")
+        .to_string();
+    client_config.add_env(HaneulEnv {
+        alias: "localnet".to_string(),
+        rpc,
+        ws: None,
+        basic_auth: None,
+        chain_id: None,
+    });
+    client_config.add_env(HaneulEnv::devnet());
+
+    if client_config.active_env.is_none() {
+        client_config.active_env = client_config.envs.first().map(|env| env.alias.clone());
+    }
+
+    client_config.save(&client_path)?;
+    info!("Client config file is stored in {:?}.", client_path);
+
+    Ok(())
+}
+
+/// If `wallet_conf_file` (or the default config file if None) doesn't exist, prompt the user and
+/// then create it (along with a new keystore file in the same directory). The prompt is skipped if
+/// `accept_defaults` is true.
+async fn prompt_if_no_config(
+    wallet_conf_file: &Path,
+    accept_defaults: bool,
+) -> Result<(), anyhow::Error> {
+    if wallet_conf_file.exists() {
+        return Ok(());
+    }
+
+    // prompt user
+    if !accept_defaults {
+        println!(
+            "No haneul config found in `{}`, create one [Y/n]?",
+            wallet_conf_file.to_string_lossy()
+        );
+        let response = read_line()?.trim().to_lowercase();
+        if !response.is_empty() && response != "y" {
+            bail!("No config found, aborting");
+        }
+    }
+
+    // make keystore
+    let config_dir = wallet_conf_file
+        .parent()
+        .ok_or_else(|| anyhow!("Error: {wallet_conf_file:?} is an invalid file path"))?;
+
+    let (keystore, address) =
+        create_default_keystore(&config_dir.join(HANEUL_KEYSTORE_FILENAME)).await?;
+
+    // make config file
+    let default_env = HaneulEnv::testnet();
+    let default_env_name = default_env.alias.clone();
+    HaneulClientConfig {
+        keystore,
+        envs: vec![
+            default_env,
+            HaneulEnv::mainnet(),
+            HaneulEnv::devnet(),
+            HaneulEnv::localnet(),
+        ],
+        external_keys: None,
+        active_address: Some(address),
+        active_env: Some(default_env_name.clone()),
+    }
+    .persisted(wallet_conf_file)
+    .save()?;
+    println!("Created {wallet_conf_file:?}");
+    println!("Set active environment to {default_env_name}");
+
+    Ok(())
+}
+
+/// Create a keystore with a single key at `keystore_file`; returns the created keystore and
+/// address
+async fn create_default_keystore(keystore_file: &Path) -> anyhow::Result<(Keystore, HaneulAddress)> {
+    let mut keystore = Keystore::from(FileBasedKeystore::load_or_create(
+        &keystore_file.to_path_buf(),
+    )?);
+    let key_scheme = SignatureScheme::ED25519;
+    let (new_address, key_pair, scheme, phrase) = generate_new_key(key_scheme, None, None)?;
+    keystore.import(None, key_pair).await?;
+    let alias = keystore.get_alias(&new_address)?;
+
+    println!(
+        "Generated new keypair and alias for address with scheme {:?} [{alias}: {new_address}]",
+        scheme.to_string()
+    );
+    println!("  secret recovery phrase : [{phrase}]");
+
+    Ok((keystore, new_address))
+}
+
+/// Read a single line from stdin and return it
+fn read_line() -> Result<String, anyhow::Error> {
+    let mut s = String::new();
+    let _ = stdout().flush();
+    io::stdin().read_line(&mut s)?;
+    Ok(s.trim_end().to_string())
+}
+
+/// Get the currently configured wallet context, creating one if it doesn't exist
+async fn get_wallet_context(client_config: &HaneulEnvConfig) -> Result<WalletContext, anyhow::Error> {
+    let wallet_conf_file = client_config
+        .config
+        .clone()
+        .unwrap_or(haneul_config_dir()?.join(HANEUL_CLIENT_CONFIG));
+
+    prompt_if_no_config(&wallet_conf_file, client_config.accept_defaults).await?;
+    let mut context = WalletContext::new(&wallet_conf_file)?;
+
+    if let Some(env_override) = &client_config.env {
+        context = context.with_env_override(env_override.clone());
+    }
+
+    Ok(context)
+}
+
+/// Get the currently configured client.
+async fn get_client(
+    client_config: HaneulEnvConfig,
+    command_err_string: &str,
+) -> Result<Client, anyhow::Error> {
+    let context = get_wallet_context(&client_config).await?;
+    let mut client = context.grpc_client()?;
+    if client.get_latest_checkpoint().await.is_err() {
+        bail!(
+            "`{command_err_string}` requires a connection to the network. \
+             Current active network is {} but failed to connect to it.",
+            context.config.active_env.as_ref().unwrap()
+        );
+    };
+
+    Ok(client)
+}
+
+/// Get the currently configured client, and the chain ID for that client.
+async fn get_chain_id_and_client(
+    client_config: HaneulEnvConfig,
+    command_err_string: &str,
+) -> anyhow::Result<(Option<String>, Option<Client>)> {
+    let client = get_client(client_config, command_err_string).await?;
+
+    Ok((
+        client
+            .get_chain_identifier()
+            .await
+            .ok()
+            .map(|chain| chain.to_string()),
+        Some(client),
+    ))
+}
+
+/// Try to resolve an ObjectID to a MovePackage
+async fn resolve_package(client: &mut Client, package_id: ObjectID) -> anyhow::Result<MovePackage> {
+    let object = client.get_object(package_id).await?;
+
+    let Some(package) = object.data.try_as_package() else {
+        bail!("Object {} is not a package.", package_id);
+    };
+
+    Ok(package.to_owned())
+}
+
+/// Download the package's modules and its dependencies to the specified path.
+async fn download_package_and_deps_under(
+    client: &mut Client,
+    path: &Path,
+    package_id: ObjectID,
+) -> anyhow::Result<PackageSummaryMetadata> {
+    let mut dependencies = BTreeMap::new();
+    let mut linkage = BTreeMap::new();
+    let mut type_origins = BTreeMap::new();
+
+    let root_package = resolve_package(client, package_id).await?;
+    for (original_id, pkg_info) in root_package.linkage_table().iter() {
+        let package = resolve_package(client, pkg_info.upgraded_id).await?;
+        let relative_package_path = package
+            .id()
+            .deref()
+            .to_canonical_string(/* with_prefix */ true);
+
+        let package_path = path.join(&relative_package_path);
+        fs::create_dir_all(&package_path)?;
+        for (m_name, module) in package.serialized_module_map() {
+            let mut file = fs::File::create(
+                package_path
+                    .join(m_name)
+                    .with_extension(MOVE_COMPILED_EXTENSION),
+            )?;
+            file.write_all(module)?;
+        }
+
+        dependencies.insert(*original_id, PathBuf::from(relative_package_path));
+        linkage.insert(*original_id, pkg_info.clone());
+        type_origins.insert(*original_id, package.type_origin_table().clone());
+    }
+
+    let package_path = path.join(
+        root_package
+            .id()
+            .deref()
+            .to_canonical_string(/* with_prefix */ true),
+    );
+    fs::create_dir_all(&package_path)?;
+    for (m_name, module) in root_package.serialized_module_map() {
+        let file_path = package_path
+            .join(m_name)
+            .with_extension(MOVE_COMPILED_EXTENSION);
+        let mut file = fs::File::create(&file_path)?;
+        file.write_all(module).with_context(|| {
+            format!(
+                "Unable to write module {m_name} for package {} to {}",
+                root_package
+                    .id()
+                    .deref()
+                    .to_canonical_string(/* with_prefix */ true),
+                file_path.display(),
+            )
+        })?;
+    }
+
+    Ok(PackageSummaryMetadata {
+        root_package_id: Some(root_package.id()),
+        root_package_original_id: Some(root_package.original_package_id()),
+        root_package_version: Some(root_package.version().value()),
+        type_origins: Some(type_origins),
+        dependencies: Some(dependencies),
+        linkage: Some(linkage),
+    })
+}
+
+/// Parse the input string into a SocketAddr, with a default port if none is provided.
+pub fn parse_host_port(
+    input: String,
+    default_port_if_missing: u16,
+) -> Result<SocketAddr, AddrParseError> {
+    let default_host = "0.0.0.0";
+    let mut input = input;
+    if input.contains("localhost") {
+        input = input.replace("localhost", "127.0.0.1");
+    }
+    if input.contains(':') {
+        input.parse::<SocketAddr>()
+    } else if input.contains('.') {
+        format!("{input}:{default_port_if_missing}").parse::<SocketAddr>()
+    } else if input.is_empty() {
+        format!("{default_host}:{default_port_if_missing}").parse::<SocketAddr>()
+    } else if !input.is_empty() {
+        format!("{default_host}:{input}").parse::<SocketAddr>()
+    } else {
+        format!("{default_host}:{default_port_if_missing}").parse::<SocketAddr>()
+    }
+}
+
+/// Get the replay node representing a specific chain (e.g., testnet, mainnet, or custom)
+/// from a given wallet context contining chain identifier string.
+pub async fn get_replay_node(
+    context: &WalletContext,
+) -> Result<haneul_data_store::Node, anyhow::Error> {
+    let chain_id = context.grpc_client()?.get_chain_identifier().await?;
+    let err_msg = format!(
+        "'{chain_id}' chain identifier is not supported for replay -- only testnet and mainnet are supported currently"
+    );
+    Ok(match chain_id.chain() {
+        Chain::Mainnet => haneul_data_store::Node::Mainnet,
+        Chain::Testnet => haneul_data_store::Node::Testnet,
+        Chain::Unknown => bail!(err_msg),
+    })
+}
+
+/// Converts a socket address to a Url by setting the scheme to HTTP.
+fn socket_addr_to_url(addr: SocketAddr) -> Result<Url, anyhow::Error> {
+    let ip = normalize_bind_addr(addr);
+    Url::parse(&format!("http://{ip}:{}", addr.port()))
+        .with_context(|| format!("Failed to parse {addr} into a Url"))
+}
+
+/// Resolves an unspecified ip address to a localhost IP address. Particularly on Windows, clients
+/// cannot connect to 0.0.0.0 addresses.
+fn normalize_bind_addr(addr: SocketAddr) -> IpAddr {
+    match addr.ip() {
+        IpAddr::V4(v4) if v4.is_unspecified() => IpAddr::V4(Ipv4Addr::LOCALHOST),
+        IpAddr::V6(v6) if v6.is_unspecified() => IpAddr::V6(Ipv6Addr::LOCALHOST),
+        ip => ip,
+    }
+}
+
+fn update_wallet_config_rpc(
+    config_dir: PathBuf,
+    fullnode_rpc_url: String,
+) -> anyhow::Result<WalletContext, anyhow::Error> {
+    let mut wallet_context = create_wallet_context(
+        FaucetConfig::default().wallet_client_timeout_secs,
+        config_dir.clone(),
+    )?;
+    if let Some(env) = wallet_context
+        .config
+        .envs
+        .iter_mut()
+        .find(|env| env.alias == "localnet")
+    {
+        env.rpc = fullnode_rpc_url;
+    }
+    wallet_context.config.save()?;
+
+    Ok(wallet_context)
+}
