@@ -1,0 +1,71 @@
+---
+source: crates/move-transactional-test-runner/src/framework.rs
+---
+processed 3 tasks
+
+task 0, lines 1-12:
+//# print-bytecode
+// Move bytecode v6
+module 6.m {
+
+entry foo() {
+L0:	x: u64
+L1:	ref_x: &mut u64
+B0:
+	0: LdU64(3)
+	1: StLoc[0](x: u64)
+	2: MutBorrowLoc[0](x: u64)
+	3: StLoc[1](ref_x: &mut u64)
+	4: LdU64(42)
+	5: MoveLoc[1](ref_x: &mut u64)
+	6: WriteRef
+	7: Ret
+}
+
+}
+
+
+task 1, lines 14-25:
+//# print-bytecode
+// Move bytecode v6
+module 3d.Foobar {
+
+struct FooCoin {
+	value: u64
+}
+
+public borrow_mut_field(arg: &mut FooCoin) {
+L1:	field_ref: &mut u64
+B0:
+	0: MoveLoc[0](arg: &mut FooCoin)
+	1: MutBorrowField[0](FooCoin.value: u64)
+	2: StLoc[1](field_ref: &mut u64)
+	3: MoveLoc[1](field_ref: &mut u64)
+	4: Pop
+	5: Ret
+}
+
+}
+
+
+task 2, lines 27-38:
+//# print-bytecode
+// Move bytecode v6
+module 4d.Foobar {
+
+struct FooCoin<T> {
+	value: u64
+}
+
+public borrow_mut_field(arg: &mut FooCoin<address>) {
+L1:	field_ref: &mut u64
+B0:
+	0: MoveLoc[0](arg: &mut FooCoin<address>)
+	1: MutBorrowFieldGeneric[0](FooCoin.value: u64)
+	2: StLoc[1](field_ref: &mut u64)
+	3: MoveLoc[1](field_ref: &mut u64)
+	4: Pop
+	5: Ret
+}
+
+}
