@@ -1,0 +1,5 @@
+[package]
+name = "Examples"
+edition = "2024.beta"
+version = "0.0.1"
+implicit-dependencies = false
