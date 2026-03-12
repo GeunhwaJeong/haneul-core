@@ -1,0 +1,366 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 5 tasks
+
+init:
+A: object(0,0)
+
+task 1, lines 6-29:
+//# publish
+created: object(1,0)
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 6004000,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 2, line 31:
+//# create-checkpoint
+Checkpoint created: 1
+
+task 3, lines 33-69:
+//# run-graphql
+Response: {
+  "data": {
+    "package": {
+      "module": {
+        "a": {
+          "name": "A",
+          "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::A",
+          "abilities": [
+            "COPY",
+            "DROP",
+            "STORE"
+          ],
+          "typeParameters": [],
+          "asMoveEnum": null,
+          "asMoveStruct": {
+            "name": "A"
+          }
+        },
+        "e": {
+          "name": "E",
+          "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::E",
+          "abilities": [
+            "STORE"
+          ],
+          "typeParameters": [],
+          "asMoveEnum": {
+            "name": "E"
+          },
+          "asMoveStruct": null
+        },
+        "s": {
+          "name": "S",
+          "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::S",
+          "abilities": [
+            "COPY",
+            "DROP"
+          ],
+          "typeParameters": [],
+          "asMoveEnum": null,
+          "asMoveStruct": {
+            "name": "S"
+          }
+        },
+        "t": {
+          "name": "T",
+          "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::T",
+          "abilities": [],
+          "typeParameters": [
+            {
+              "constraints": [
+                "DROP"
+              ],
+              "isPhantom": true
+            }
+          ],
+          "asMoveEnum": null,
+          "asMoveStruct": {
+            "name": "T"
+          }
+        },
+        "v": {
+          "name": "V",
+          "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::V",
+          "abilities": [],
+          "typeParameters": [
+            {
+              "constraints": [
+                "KEY"
+              ],
+              "isPhantom": false
+            }
+          ],
+          "asMoveEnum": {
+            "name": "V"
+          },
+          "asMoveStruct": null
+        },
+        "aStruct": {
+          "name": "A"
+        },
+        "aEnum": null,
+        "eStruct": null,
+        "eEnum": {
+          "name": "E"
+        },
+        "doesntExist": null,
+        "datatypes": {
+          "nodes": [
+            {
+              "name": "A",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::A",
+              "abilities": [
+                "COPY",
+                "DROP",
+                "STORE"
+              ],
+              "typeParameters": [],
+              "asMoveEnum": null,
+              "asMoveStruct": {
+                "name": "A"
+              }
+            },
+            {
+              "name": "E",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::E",
+              "abilities": [
+                "STORE"
+              ],
+              "typeParameters": [],
+              "asMoveEnum": {
+                "name": "E"
+              },
+              "asMoveStruct": null
+            },
+            {
+              "name": "S",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::S",
+              "abilities": [
+                "COPY",
+                "DROP"
+              ],
+              "typeParameters": [],
+              "asMoveEnum": null,
+              "asMoveStruct": {
+                "name": "S"
+              }
+            },
+            {
+              "name": "T",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::T",
+              "abilities": [],
+              "typeParameters": [
+                {
+                  "constraints": [
+                    "DROP"
+                  ],
+                  "isPhantom": true
+                }
+              ],
+              "asMoveEnum": null,
+              "asMoveStruct": {
+                "name": "T"
+              }
+            },
+            {
+              "name": "V",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::V",
+              "abilities": [],
+              "typeParameters": [
+                {
+                  "constraints": [
+                    "KEY"
+                  ],
+                  "isPhantom": false
+                }
+              ],
+              "asMoveEnum": {
+                "name": "V"
+              },
+              "asMoveStruct": null
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+
+task 4, lines 71-101:
+//# run-graphql --cursors "A" "V"
+Response: {
+  "data": {
+    "package": {
+      "module": {
+        "all": {
+          "pageInfo": {
+            "hasPreviousPage": false,
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "name": "A",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::A"
+            },
+            {
+              "name": "E",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::E"
+            },
+            {
+              "name": "S",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::S"
+            },
+            {
+              "name": "T",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::T"
+            },
+            {
+              "name": "V",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::V"
+            }
+          ]
+        },
+        "first": {
+          "pageInfo": {
+            "hasPreviousPage": false,
+            "hasNextPage": true
+          },
+          "nodes": [
+            {
+              "name": "A",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::A"
+            },
+            {
+              "name": "E",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::E"
+            },
+            {
+              "name": "S",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::S"
+            }
+          ]
+        },
+        "last": {
+          "pageInfo": {
+            "hasPreviousPage": true,
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "name": "S",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::S"
+            },
+            {
+              "name": "T",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::T"
+            },
+            {
+              "name": "V",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::V"
+            }
+          ]
+        },
+        "firstBefore": {
+          "pageInfo": {
+            "hasPreviousPage": false,
+            "hasNextPage": true
+          },
+          "nodes": [
+            {
+              "name": "A",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::A"
+            },
+            {
+              "name": "E",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::E"
+            },
+            {
+              "name": "S",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::S"
+            }
+          ]
+        },
+        "lastAfter": {
+          "pageInfo": {
+            "hasPreviousPage": true,
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "name": "S",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::S"
+            },
+            {
+              "name": "T",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::T"
+            },
+            {
+              "name": "V",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::V"
+            }
+          ]
+        },
+        "firstAfter": {
+          "pageInfo": {
+            "hasPreviousPage": true,
+            "hasNextPage": true
+          },
+          "nodes": [
+            {
+              "name": "E",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::E"
+            },
+            {
+              "name": "S",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::S"
+            },
+            {
+              "name": "T",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::T"
+            }
+          ]
+        },
+        "lastBefore": {
+          "pageInfo": {
+            "hasPreviousPage": true,
+            "hasNextPage": true
+          },
+          "nodes": [
+            {
+              "name": "E",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::E"
+            },
+            {
+              "name": "S",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::S"
+            },
+            {
+              "name": "T",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::T"
+            }
+          ]
+        },
+        "afterBefore": {
+          "pageInfo": {
+            "hasPreviousPage": true,
+            "hasNextPage": true
+          },
+          "nodes": [
+            {
+              "name": "E",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::E"
+            },
+            {
+              "name": "S",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::S"
+            },
+            {
+              "name": "T",
+              "fullyQualifiedName": "0xaca85878fb5805183fbe55fc73c0e4095089346ee21e1b026817e1a32d11ffb1::M::T"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

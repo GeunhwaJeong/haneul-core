@@ -1,0 +1,287 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 5 tasks
+
+init:
+A: object(0,0)
+
+task 1, lines 6-16:
+//# publish
+created: object(1,0)
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 4142000,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 2, line 18:
+//# create-checkpoint
+Checkpoint created: 1
+
+task 3, lines 20-42:
+//# run-graphql
+Response: {
+  "data": {
+    "package": {
+      "module": {
+        "f": {
+          "name": "f",
+          "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::f",
+          "isEntry": false,
+          "parameters": [],
+          "return": [
+            {
+              "repr": "u64",
+              "signature": {
+                "body": "u64"
+              }
+            }
+          ],
+          "typeParameters": [],
+          "visibility": "PUBLIC"
+        },
+        "g": {
+          "name": "g",
+          "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::g",
+          "isEntry": true,
+          "parameters": [],
+          "return": [
+            {
+              "repr": "u64",
+              "signature": {
+                "body": "u64"
+              }
+            }
+          ],
+          "typeParameters": [],
+          "visibility": "PRIVATE"
+        },
+        "h": {
+          "name": "h",
+          "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::h",
+          "isEntry": false,
+          "parameters": [
+            {
+              "repr": "vector<$0>",
+              "signature": {
+                "body": {
+                  "vector": {
+                    "typeParameter": 0
+                  }
+                }
+              }
+            },
+            {
+              "repr": "vector<$1>",
+              "signature": {
+                "body": {
+                  "vector": {
+                    "typeParameter": 1
+                  }
+                }
+              }
+            }
+          ],
+          "return": [
+            {
+              "repr": "u64",
+              "signature": {
+                "body": "u64"
+              }
+            }
+          ],
+          "typeParameters": [
+            {
+              "constraints": [
+                "DROP",
+                "STORE"
+              ]
+            },
+            {
+              "constraints": [
+                "COPY",
+                "DROP"
+              ]
+            }
+          ],
+          "visibility": "FRIEND"
+        },
+        "i": {
+          "name": "i",
+          "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::i",
+          "isEntry": false,
+          "parameters": [
+            {
+              "repr": "u64",
+              "signature": {
+                "body": "u64"
+              }
+            }
+          ],
+          "return": [
+            {
+              "repr": "u64",
+              "signature": {
+                "body": "u64"
+              }
+            },
+            {
+              "repr": "u64",
+              "signature": {
+                "body": "u64"
+              }
+            }
+          ],
+          "typeParameters": [],
+          "visibility": "PUBLIC"
+        },
+        "x": null
+      }
+    }
+  }
+}
+
+task 4, lines 44-72:
+//# run-graphql --cursors "f" "i"
+Response: {
+  "data": {
+    "package": {
+      "module": {
+        "all": {
+          "pageInfo": {
+            "hasPreviousPage": false,
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "name": "f",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::f"
+            },
+            {
+              "name": "g",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::g"
+            },
+            {
+              "name": "h",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::h"
+            },
+            {
+              "name": "i",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::i"
+            }
+          ]
+        },
+        "first": {
+          "pageInfo": {
+            "hasPreviousPage": false,
+            "hasNextPage": true
+          },
+          "nodes": [
+            {
+              "name": "f",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::f"
+            },
+            {
+              "name": "g",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::g"
+            }
+          ]
+        },
+        "last": {
+          "pageInfo": {
+            "hasPreviousPage": true,
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "name": "h",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::h"
+            },
+            {
+              "name": "i",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::i"
+            }
+          ]
+        },
+        "firstBefore": {
+          "pageInfo": {
+            "hasPreviousPage": false,
+            "hasNextPage": true
+          },
+          "nodes": [
+            {
+              "name": "f",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::f"
+            },
+            {
+              "name": "g",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::g"
+            }
+          ]
+        },
+        "lastAfter": {
+          "pageInfo": {
+            "hasPreviousPage": true,
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "name": "h",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::h"
+            },
+            {
+              "name": "i",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::i"
+            }
+          ]
+        },
+        "firstAfter": {
+          "pageInfo": {
+            "hasPreviousPage": true,
+            "hasNextPage": true
+          },
+          "nodes": [
+            {
+              "name": "g",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::g"
+            },
+            {
+              "name": "h",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::h"
+            }
+          ]
+        },
+        "lastBefore": {
+          "pageInfo": {
+            "hasPreviousPage": true,
+            "hasNextPage": true
+          },
+          "nodes": [
+            {
+              "name": "g",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::g"
+            },
+            {
+              "name": "h",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::h"
+            }
+          ]
+        },
+        "afterBefore": {
+          "pageInfo": {
+            "hasPreviousPage": true,
+            "hasNextPage": true
+          },
+          "nodes": [
+            {
+              "name": "g",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::g"
+            },
+            {
+              "name": "h",
+              "fullyQualifiedName": "0x8c33f97e8253fb4188ad4572dfb8d9f396ed5548b93f939c0d234383a6b7917a::M::h"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
