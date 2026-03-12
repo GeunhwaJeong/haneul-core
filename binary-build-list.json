@@ -1,0 +1,19 @@
+{
+    "release_binaries": [
+        "haneul",
+        "haneul-node",
+        "haneul-tool",
+        "haneul-faucet",
+        "haneul-bridge",
+        "haneul-bridge-cli",
+        "haneul-test-validator",
+        "move-analyzer"
+    ],
+    "internal_binaries": [
+        "stress",
+        "haneul-proxy",
+        "haneul-metric-checker",
+        "haneul-analytics-indexer",
+        "haneul-security-watchdog"
+	]
+}
