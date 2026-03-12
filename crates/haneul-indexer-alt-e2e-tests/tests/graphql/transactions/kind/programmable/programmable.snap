@@ -1,0 +1,152 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 6 tasks
+
+init:
+A: object(0,0), B: object(0,1)
+
+task 1, lines 6-27:
+//# publish
+created: object(1,0), object(1,1)
+mutated: object(0,2)
+gas summary: computation_cost: 1000000, storage_cost: 7235200,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 2, lines 29-32:
+//# programmable --sender A --inputs object(1,0) 42 @B
+//> 0: test::simple::increment(Input(0));
+//> 1: test::simple::add(Input(0), Input(1));
+//> 2: TransferObjects([Gas], Input(2))
+mutated: object(0,0), object(1,0)
+gas summary: computation_cost: 1000000, storage_cost: 2340800,  storage_rebate: 1339272, non_refundable_storage_fee: 13528
+
+task 3, line 34:
+//# create-checkpoint
+Checkpoint created: 1
+
+task 4, lines 36-77:
+//# run-graphql
+Response: {
+  "data": {
+    "programmableTransaction": {
+      "digest": "4Vksp8jyeqGSSt7h6ktSLpUktgfMfAQ2AUxhTvkBaj5E",
+      "kind": {
+        "__typename": "ProgrammableTransaction",
+        "inputs": {
+          "pageInfo": {
+            "hasNextPage": false,
+            "hasPreviousPage": false
+          },
+          "nodes": [
+            {
+              "__typename": "SharedInput"
+            },
+            {
+              "__typename": "MoveValue",
+              "json": "42"
+            },
+            {
+              "__typename": "MoveValue",
+              "json": "0xa7b032703878aa74c3126935789fd1d4d7e111d5911b09247d6963061c312b5a"
+            }
+          ]
+        },
+        "commands": {
+          "pageInfo": {
+            "hasNextPage": false,
+            "hasPreviousPage": false
+          },
+          "nodes": [
+            {
+              "__typename": "MoveCallCommand",
+              "function": {
+                "module": {
+                  "package": {
+                    "address": "0x9ae77a898283117b70cc87c5936e3038c85ac5447f1b4301ef232e8453acec11"
+                  },
+                  "name": "simple"
+                },
+                "name": "increment"
+              }
+            },
+            {
+              "__typename": "MoveCallCommand",
+              "function": {
+                "module": {
+                  "package": {
+                    "address": "0x9ae77a898283117b70cc87c5936e3038c85ac5447f1b4301ef232e8453acec11"
+                  },
+                  "name": "simple"
+                },
+                "name": "add"
+              }
+            },
+            {
+              "__typename": "TransferObjectsCommand"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+
+task 5, lines 79-120:
+//# run-graphql
+Response: {
+  "data": {
+    "paginationTest": {
+      "digest": "4Vksp8jyeqGSSt7h6ktSLpUktgfMfAQ2AUxhTvkBaj5E",
+      "kind": {
+        "__typename": "ProgrammableTransaction",
+        "inputs": {
+          "pageInfo": {
+            "hasNextPage": true,
+            "hasPreviousPage": false
+          },
+          "nodes": [
+            {
+              "__typename": "SharedInput"
+            },
+            {
+              "__typename": "MoveValue",
+              "json": "42"
+            }
+          ]
+        },
+        "commands": {
+          "pageInfo": {
+            "hasNextPage": true,
+            "hasPreviousPage": false
+          },
+          "nodes": [
+            {
+              "__typename": "MoveCallCommand",
+              "function": {
+                "module": {
+                  "package": {
+                    "address": "0x9ae77a898283117b70cc87c5936e3038c85ac5447f1b4301ef232e8453acec11"
+                  },
+                  "name": "simple"
+                },
+                "name": "increment"
+              }
+            },
+            {
+              "__typename": "MoveCallCommand",
+              "function": {
+                "module": {
+                  "package": {
+                    "address": "0x9ae77a898283117b70cc87c5936e3038c85ac5447f1b4301ef232e8453acec11"
+                  },
+                  "name": "simple"
+                },
+                "name": "add"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

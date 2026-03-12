@@ -1,0 +1,60 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 6 tasks
+
+init:
+A: object(0,0), B: object(0,1), C: object(0,2)
+
+task 1, lines 6-8:
+//# programmable --sender A --inputs 42 @B
+//> 0: SplitCoins(Gas, [Input(0)]);
+//> 1: TransferObjects([Result(0)], Input(1))
+created: object(1,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 2, lines 10-12:
+//# programmable --sender B --sponsor C --inputs 43 @A
+//> 0: SplitCoins(Gas, [Input(0)]);
+//> 1: TransferObjects([Result(0)], Input(1))
+created: object(2,0)
+mutated: object(0,2)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 3, line 14:
+//# create-checkpoint
+Checkpoint created: 1
+
+task 4, lines 16-24:
+//# run-graphql
+Response: {
+  "data": {
+    "singleSig": {
+      "digest": "3By9BmCacnTWHtGLCHwwNK8wcyvzVxLLdsG5o2LwvAbM",
+      "signatures": [
+        {
+          "signatureBytes": "AJ/67cH93lqFdEFjiit3AnDjt06BRqy5Zle4ndSxZ440NlZeYbYMOllJIgJGtabRF8oORifC4wec8DjDX1JlpwR/UUY663bYjcm3XmNyULIgxJz1t5Z9vxfB+fp8WUoJKA=="
+        }
+      ]
+    }
+  }
+}
+
+task 5, lines 26-34:
+//# run-graphql
+Response: {
+  "data": {
+    "multiSig": {
+      "digest": "A9VtYXbQjrzPryPLNzjSWLq77XDqxzVVaxebsF6RjShu",
+      "signatures": [
+        {
+          "signatureBytes": "AJ3DamKPMnnmsnJlpOi6jDJubBl5doHqav47anfC2u7kib4jcM6U5xP4CHYL8T8Z/vhu3JpS9IjfXAvc0dwHrQZjShJ/h11TzB1kNRDs/tZZYOUuR7hLdy4MWvdZMWHaqw=="
+        },
+        {
+          "signatureBytes": "AMy/H6Ha8aebdDldFFM1qyg0D7kegpyh3n+zRkrYeUgmKGlwbfCbKW+grABdx9F/uC1TGKPW6GreqVgXrlIRdwiea9+AYO7cFrl2UiI8mqgOfdypWEBHOeWh8bAaRfXLzA=="
+        }
+      ]
+    }
+  }
+}
