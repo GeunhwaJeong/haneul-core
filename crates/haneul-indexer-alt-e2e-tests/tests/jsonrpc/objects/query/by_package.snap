@@ -1,0 +1,190 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 12 tasks
+
+init:
+A: object(0,0), B: object(0,1)
+
+task 1, lines 11-38:
+//# publish
+created: object(1,0)
+mutated: object(0,2)
+gas summary: computation_cost: 1000000, storage_cost: 6961600,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 2, lines 40-42:
+//# programmable --sender B --inputs @B
+//> 0: P::M::o1();
+//> 1: TransferObjects([Result(0)], Input(0))
+created: object(2,0)
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 2204000,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 3, lines 44-48:
+//# programmable --sender A --inputs @A
+//> 0: P::M::o1();
+//> 1: P::M::o2();
+//> 2: P::N::o1();
+//> 3: TransferObjects([Result(0), Result(1), Result(2)], Input(0))
+created: object(3,0), object(3,1), object(3,2)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 4636000,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 4, lines 50-52:
+//# programmable --sender A --inputs @A 42 43 44
+//> 0: SplitCoins(Gas, [Input(1), Input(2), Input(3)]);
+//> 1: TransferObjects([NestedResult(0,0), NestedResult(0,1), NestedResult(0,2)], Input(0))
+created: object(4,0), object(4,1), object(4,2)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 3952000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 5, line 54:
+//# create-checkpoint
+Checkpoint created: 1
+
+task 6, lines 56-58:
+//# programmable --sender A --inputs @A
+//> 0: P::M::o1();
+//> 1: TransferObjects([Result(0)], Input(0))
+created: object(6,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 2204000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 7, lines 60-62:
+//# programmable --sender A --inputs @A 45
+//> 0: SplitCoins(Gas, [Input(1)]);
+//> 1: TransferObjects([Result(0)], Input(0))
+created: object(7,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 8, line 64:
+//# create-checkpoint
+Checkpoint created: 2
+
+task 9, lines 66-76:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 0,
+  "result": {
+    "data": [
+      {
+        "data": {
+          "objectId": "0x0d875cecc15c2bbcb32228bbfa4f7412d5f89f32459e440b2ec27e0ac5a4cae3",
+          "version": "4",
+          "digest": "9c1TzAnr38wzDMwWzcQyStcUvRAR6eKNniV65jfR6dyC",
+          "type": "0x428979677f4098b0331ad1ed19f12ceab796c241c7dbee8a7ba056d8587ed27c::M::O1"
+        }
+      },
+      {
+        "data": {
+          "objectId": "0x9983ce1bace8b8a35c9775681f84172611d09eedf1bf82df82c817ddbf206ad8",
+          "version": "2",
+          "digest": "GcMob8ZvTcMa5aT6HSxd2YkxaDky8zEZJQq46wW2uw7B",
+          "type": "0x428979677f4098b0331ad1ed19f12ceab796c241c7dbee8a7ba056d8587ed27c::M::O1"
+        }
+      },
+      {
+        "data": {
+          "objectId": "0x16d742f9a3554e3b7818bc65e6c69f2bd1d887accfa17245a0fb6df8161d8b2b",
+          "version": "2",
+          "digest": "89yGQheeGPWmpYAyZXQ3zPLw7f7fPg6MmaE8JUtxgka8",
+          "type": "0x428979677f4098b0331ad1ed19f12ceab796c241c7dbee8a7ba056d8587ed27c::M::O2"
+        }
+      },
+      {
+        "data": {
+          "objectId": "0x649ae4fb18399ca7134b1861893b428c643616d26bfc8bc72c35155ea0bf2be2",
+          "version": "2",
+          "digest": "DZKT1FKiCjDQngarKPSCkyqBm3ACAR1ghj9y2STSZxhX",
+          "type": "0x428979677f4098b0331ad1ed19f12ceab796c241c7dbee8a7ba056d8587ed27c::N::O1"
+        }
+      }
+    ],
+    "nextCursor": "fQD8zJpCG7sTwaZqGqmPCtdQKe3pSFd3nGkVtE+UBouSHkKJeWd/QJiwMxrR7RnxLOq3lsJBx9vuinugVthYftJ8AAAAAAAAAAFOAAAAAAAAAAJPMQAAAAAAAAAAAGSa5PsYOZynE0sYYYk7QoxkNhbSa/yLxyw1FV6gvyvi",
+    "hasNextPage": false
+  }
+}
+
+task 10, lines 78-88:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "data": [
+      {
+        "data": {
+          "objectId": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+          "version": "5",
+          "digest": "AeivCMNPU4DLDUjxZGvzGA7arqzdHDkFZF6RhEbWcMqM",
+          "type": "0x2::coin::Coin<0x2::haneul::HANEUL>"
+        }
+      },
+      {
+        "data": {
+          "objectId": "0xdc3dc5e2b826e43f52f1c098a8050b5bc3a0e375e68b3793df2aa2a45f8d75dd",
+          "version": "5",
+          "digest": "6KmTZWUJeKNsQW3ZR8N7jqSuwQ1hsbjkMJvncGBWfjTB",
+          "type": "0x2::coin::Coin<0x2::haneul::HANEUL>"
+        }
+      },
+      {
+        "data": {
+          "objectId": "0xff0671b34118f40afcc008304acd24296e424f4cb3b161fd68209a1f9104427e",
+          "version": "3",
+          "digest": "HPUvX1uduKqGYar2L2GVXjnG4smr5NpN3Csm5Jsch5Xn",
+          "type": "0x2::coin::Coin<0x2::haneul::HANEUL>"
+        }
+      },
+      {
+        "data": {
+          "objectId": "0x287a75df012ad1939fbea40f22754021940d36201dd5c8505956171fc64d5a40",
+          "version": "3",
+          "digest": "JCehqeC2RVg6YZzHoK4mpPtHwF6zD5ydjdbJjLM6aXp1",
+          "type": "0x2::coin::Coin<0x2::haneul::HANEUL>"
+        }
+      },
+      {
+        "data": {
+          "objectId": "0xd0f9f481ba2b495556a647469d0d31db7c6dd27cf1c6b4cce6f870a19aee2779",
+          "version": "3",
+          "digest": "6cK8Pyo6i8VeArVX6yMaerj6H8LiQ2fjo1Wf9TuoLJQX",
+          "type": "0x2::coin::Coin<0x2::haneul::HANEUL>"
+        }
+      }
+    ],
+    "nextCursor": "zAEA/MyaQhu7E8GmahqpjwrXUCnt6UhXd5xpFbRPlAaLkh4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAEY29pbgAAAAAAAAAEQ29pbgAAAAAAAAABAAAABwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAANzdWkAAAAAAAAAA1NVSQAAAAAAAAAAAf/////////V0Pn0gborSVVWpkdGnQ0x23xt0nzxxrTM5vhwoZruJ3k=",
+    "hasNextPage": false
+  }
+}
+
+task 11, lines 90-102:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "data": [
+      {
+        "data": {
+          "objectId": "0x0d875cecc15c2bbcb32228bbfa4f7412d5f89f32459e440b2ec27e0ac5a4cae3",
+          "version": "4",
+          "digest": "9c1TzAnr38wzDMwWzcQyStcUvRAR6eKNniV65jfR6dyC",
+          "type": "0x428979677f4098b0331ad1ed19f12ceab796c241c7dbee8a7ba056d8587ed27c::M::O1"
+        }
+      },
+      {
+        "data": {
+          "objectId": "0x9983ce1bace8b8a35c9775681f84172611d09eedf1bf82df82c817ddbf206ad8",
+          "version": "2",
+          "digest": "GcMob8ZvTcMa5aT6HSxd2YkxaDky8zEZJQq46wW2uw7B",
+          "type": "0x428979677f4098b0331ad1ed19f12ceab796c241c7dbee8a7ba056d8587ed27c::M::O1"
+        }
+      }
+    ],
+    "nextCursor": "fQD8zJpCG7sTwaZqGqmPCtdQKe3pSFd3nGkVtE+UBouSHkKJeWd/QJiwMxrR7RnxLOq3lsJBx9vuinugVthYftJ8AAAAAAAAAAFNAAAAAAAAAAJPMQAAAAAAAAAAAJmDzhus6LijXJd1aB+EFyYR0J7t8b+C34LIF92/IGrY",
+    "hasNextPage": true
+  }
+}

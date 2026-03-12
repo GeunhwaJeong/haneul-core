@@ -1,0 +1,144 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 8 tasks
+
+init:
+A: object(0,0)
+
+task 1, lines 10-19:
+//# publish
+created: object(1,0)
+mutated: object(0,1)
+gas summary: computation_cost: 1000000, storage_cost: 4620800,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 2, lines 21-23:
+//# programmable --sender A --inputs @A
+//> 0: test::mod::new();
+//> 1: TransferObjects([Result(0)], Input(0))
+created: object(2,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 2226800,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 3, lines 25-27:
+//# programmable --sender A --inputs 42 @A
+//> 0: SplitCoins(Gas, [Input(0)]);
+//> 1: TransferObjects([Result(0)], Input(1))
+created: object(3,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 4, line 29:
+//# create-checkpoint
+Checkpoint created: 1
+
+task 5, lines 31-35:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 0,
+  "result": {
+    "status": "VersionFound",
+    "details": {
+      "objectId": "0xd722bc743834a568c0f3ea8e9b729769d002fa3759941e8cae2ae01eaf738443",
+      "version": "1",
+      "digest": "DP55zYhc9zkg3Avck5HCZBssJYJCZ5sT1tppBWxwptKY",
+      "content": {
+        "dataType": "package",
+        "disassembled": {
+          "mod": "// Move bytecode v6\nmodule d722bc743834a568c0f3ea8e9b729769d002fa3759941e8cae2ae01eaf738443.mod {\nuse 0000000000000000000000000000000000000000000000000000000000000002::object;\nuse 0000000000000000000000000000000000000000000000000000000000000002::tx_context;\n\nstruct Foo has store, key {\n\tid: UID\n}\n\npublic new(Arg0: &mut TxContext): Foo {\nB0:\n\t0: MoveLoc[0](Arg0: &mut TxContext)\n\t1: Call object::new(&mut TxContext): UID\n\t2: Pack[0](Foo)\n\t3: Ret\n}\n\n}\n"
+        }
+      },
+      "bcs": {
+        "dataType": "package",
+        "id": "0xd722bc743834a568c0f3ea8e9b729769d002fa3759941e8cae2ae01eaf738443",
+        "version": 1,
+        "moduleMap": {
+          "mod": "oRzrCwYAAAAIAQAGAgYMAxIKBRwLBycvCFZACpYBBgycAQ0ABAEGAQcAAAwAAQIEAAIBAgAABQABAAEFAAMAAQcIAgEIAAABCAEDRm9vCVR4Q29udGV4dANVSUQCaWQDbW9kA25ldwZvYmplY3QKdHhfY29udGV4dNcivHQ4NKVowPPqjptyl2nQAvo3WZQejK4q4B6vc4RDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAgEDCAEAAQAAAgQLABEBEgACAA=="
+        },
+        "typeOriginTable": [
+          {
+            "module_name": "mod",
+            "datatype_name": "Foo",
+            "package": "0xd722bc743834a568c0f3ea8e9b729769d002fa3759941e8cae2ae01eaf738443"
+          }
+        ],
+        "linkageTable": {
+          "0x0000000000000000000000000000000000000000000000000000000000000001": {
+            "upgraded_id": "0x0000000000000000000000000000000000000000000000000000000000000001",
+            "upgraded_version": 1
+          },
+          "0x0000000000000000000000000000000000000000000000000000000000000002": {
+            "upgraded_id": "0x0000000000000000000000000000000000000000000000000000000000000002",
+            "upgraded_version": 1
+          }
+        }
+      }
+    }
+  }
+}
+
+task 6, lines 37-41:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "status": "VersionFound",
+    "details": {
+      "objectId": "0x69600d7b4dbc386eac0375091ed36a5712d317a44d8535192315aa6290d66371",
+      "version": "2",
+      "digest": "CvKGf3iz9AksuFkrsvNgV3uqwmN64vawHL1scMuEnnMv",
+      "content": {
+        "dataType": "moveObject",
+        "type": "0xd722bc743834a568c0f3ea8e9b729769d002fa3759941e8cae2ae01eaf738443::mod::Foo",
+        "hasPublicTransfer": true,
+        "fields": {
+          "id": {
+            "id": "0x69600d7b4dbc386eac0375091ed36a5712d317a44d8535192315aa6290d66371"
+          }
+        }
+      },
+      "bcs": {
+        "dataType": "moveObject",
+        "type": "0xd722bc743834a568c0f3ea8e9b729769d002fa3759941e8cae2ae01eaf738443::mod::Foo",
+        "hasPublicTransfer": true,
+        "version": 2,
+        "bcsBytes": "aWANe028OG6sA3UJHtNqVxLTF6RNhTUZIxWqYpDWY3E="
+      }
+    }
+  }
+}
+
+task 7, lines 43-47:
+//# run-jsonrpc
+Response: {
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "status": "VersionFound",
+    "details": {
+      "objectId": "0x3df6013d3b9466374fc569c41ebcacfcfd98c023f17d50fdeecfa6526b151b25",
+      "version": "3",
+      "digest": "3xexRY5pLbBjMFYjbQW1g6d8CXHJDfhV1GiDWmUihiyK",
+      "content": {
+        "dataType": "moveObject",
+        "type": "0x2::coin::Coin<0x2::haneul::HANEUL>",
+        "hasPublicTransfer": true,
+        "fields": {
+          "balance": "42",
+          "id": {
+            "id": "0x3df6013d3b9466374fc569c41ebcacfcfd98c023f17d50fdeecfa6526b151b25"
+          }
+        }
+      },
+      "bcs": {
+        "dataType": "moveObject",
+        "type": "0x2::coin::Coin<0x2::haneul::HANEUL>",
+        "hasPublicTransfer": true,
+        "version": 3,
+        "bcsBytes": "PfYBPTuUZjdPxWnEHrys/P2YwCPxfVD97s+mUmsVGyUqAAAAAAAAAA=="
+      }
+    }
+  }
+}
