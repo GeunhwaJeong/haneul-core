@@ -1,0 +1,75 @@
+// Copyright (c) Mysten Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use std::pin::Pin;
+
+use crate::RpcService;
+use haneul_rpc::field::FieldMaskTree;
+use haneul_rpc::merge::Merge;
+use haneul_rpc::proto::haneul::rpc::v2::Checkpoint;
+use haneul_rpc::proto::haneul::rpc::v2::SubscribeCheckpointsRequest;
+use haneul_rpc::proto::haneul::rpc::v2::SubscribeCheckpointsResponse;
+use haneul_rpc::proto::haneul::rpc::v2::subscription_service_server::SubscriptionService;
+use haneul_types::balance_change::derive_balance_changes_2;
+
+#[tonic::async_trait]
+impl SubscriptionService for RpcService {
+    /// Server streaming response type for the SubscribeCheckpoints method.
+    type SubscribeCheckpointsStream = Pin<
+        Box<
+            dyn tokio_stream::Stream<Item = Result<SubscribeCheckpointsResponse, tonic::Status>>
+                + Send,
+        >,
+    >;
+
+    async fn subscribe_checkpoints(
+        &self,
+        request: tonic::Request<SubscribeCheckpointsRequest>,
+    ) -> Result<tonic::Response<Self::SubscribeCheckpointsStream>, tonic::Status> {
+        let subscription_service_handle = self
+            .subscription_service_handle
+            .as_ref()
+            .ok_or_else(|| tonic::Status::unimplemented("subscription service not enabled"))?;
+        let read_mask = request.into_inner().read_mask.unwrap_or_default();
+        let read_mask = FieldMaskTree::from(read_mask);
+
+        let Some(mut receiver) = subscription_service_handle.register_subscription().await else {
+            return Err(tonic::Status::unavailable(
+                "too many existing subscriptions",
+            ));
+        };
+
+        let response = Box::pin(async_stream::stream! {
+            while let Some(checkpoint) = receiver.recv().await {
+                let cursor = checkpoint.summary.sequence_number;
+
+                let mut checkpoint_message = Checkpoint::merge_from(
+                    checkpoint.as_ref(),
+                    &read_mask
+                );
+
+                if read_mask.contains("transactions.balance_changes") {
+                    for (txn, effects) in checkpoint_message.transactions_mut().iter_mut().zip(
+                        checkpoint
+                            .transactions
+                            .iter()
+                            .map(|t| &t.effects),
+                    ) {
+                        *txn.balance_changes_mut() = derive_balance_changes_2(effects, &checkpoint.object_set)
+                            .into_iter()
+                            .map(Into::into)
+                            .collect();
+                    }
+                }
+
+                let mut response = SubscribeCheckpointsResponse::default();
+                response.cursor = Some(cursor);
+                response.checkpoint = Some(checkpoint_message);
+
+                yield Ok(response);
+            }
+        });
+
+        Ok(tonic::Response::new(response))
+    }
+}
