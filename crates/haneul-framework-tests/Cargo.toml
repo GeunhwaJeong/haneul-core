@@ -1,0 +1,44 @@
+[package]
+name = "haneul-framework-tests"
+version = "0.1.0"
+edition = "2024"
+authors = ["Haneul Labs <eng@haneul-labs.com>"]
+description = "Runs Move tests for haneul-framework"
+license = "Apache-2.0"
+publish = false
+
+[lints]
+workspace = true
+
+[[test]]
+name = "move_tests"
+harness = false
+
+[dev-dependencies]
+datatest-stable.workspace = true
+prometheus.workspace = true
+
+haneul-framework.workspace = true
+haneul-move.workspace = true
+haneul-move-build.workspace = true
+haneul-protocol-config.workspace = true
+haneul-types.workspace = true
+
+move-bytecode-verifier = { path = "../../external-crates/move/crates/move-bytecode-verifier" }
+haneul-adapter = { path = "../../haneul-execution/latest/haneul-adapter", package = "haneul-adapter-latest" }
+haneul-verifier = { path = "../../haneul-execution/latest/haneul-verifier", package = "haneul-verifier-latest" }
+
+move-bytecode-verifier-meter.workspace = true
+move-cli.workspace = true
+move-package-alt-compilation.workspace = true
+move-unit-test.workspace = true
+haneul-config.workspace = true
+tokio.workspace = true
+
+[target.'cfg(msim)'.dependencies]
+msim.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+tempfile.workspace = true
+fs_extra.workspace = true
