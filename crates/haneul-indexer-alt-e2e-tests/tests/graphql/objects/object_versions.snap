@@ -1,0 +1,497 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 23 tasks
+
+init:
+A: object(0,0)
+
+task 1, lines 6-8:
+//# programmable --sender A --inputs 1
+//> SplitCoins(Gas, [Input(0)]);
+//> MergeCoins(Gas, [Result(0)])
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 2, lines 10-12:
+//# programmable --sender A --inputs 1
+//> SplitCoins(Gas, [Input(0)]);
+//> MergeCoins(Gas, [Result(0)])
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 3, line 14:
+//# create-checkpoint
+Checkpoint created: 1
+
+task 4, lines 16-18:
+//# programmable --sender A --inputs 1
+//> SplitCoins(Gas, [Input(0)]);
+//> MergeCoins(Gas, [Result(0)])
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 5, lines 20-22:
+//# programmable --sender A --inputs 1
+//> SplitCoins(Gas, [Input(0)]);
+//> MergeCoins(Gas, [Result(0)])
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 6, line 24:
+//# create-checkpoint
+Checkpoint created: 2
+
+task 7, lines 26-28:
+//# programmable --sender A --inputs 1
+//> SplitCoins(Gas, [Input(0)]);
+//> MergeCoins(Gas, [Result(0)])
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 8, line 30:
+//# create-checkpoint
+Checkpoint created: 3
+
+task 9, lines 32-56:
+//# run-graphql
+Response: {
+  "data": {
+    "objectVersions": {
+      "pageInfo": {
+        "hasPreviousPage": false,
+        "hasNextPage": false,
+        "startCursor": "MQ==",
+        "endCursor": "Ng=="
+      },
+      "edges": [
+        {
+          "cursor": "MQ==",
+          "node": {
+            "address": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+            "version": 1,
+            "objectBcs": "AAEBAQAAAAAAAAAosNgmeGrTdLnm552kotbI1fI8QTrrdvoLB+VjbRc6So8AwG4x2RABAAD8zJpCG7sTwaZqGqmPCtdQKe3pSFd3nGkVtE+UBouSHiB9YeLGv6NDXwI4YIiRR5hSqz5W/4mlnj8dAYfXndZ7AAAAAAAAAAAA",
+            "asMoveObject": {
+              "contents": {
+                "type": {
+                  "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+                },
+                "json": {
+                  "id": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+                  "balance": "300000000000000"
+                }
+              }
+            }
+          }
+        },
+        {
+          "cursor": "Mg==",
+          "node": {
+            "address": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+            "version": 2,
+            "objectBcs": "AAEBAgAAAAAAAAAosNgmeGrTdLnm552kotbI1fI8QTrrdvoLB+VjbRc6So9galAx2RABAAD8zJpCG7sTwaZqGqmPCtdQKe3pSFd3nGkVtE+UBouSHiA6FRkwQZSZpOiqyn60vqQr3FF9jxMCc5e4igsyAUCtkWATDwAAAAAA",
+            "asMoveObject": {
+              "contents": {
+                "type": {
+                  "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+                },
+                "json": {
+                  "id": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+                  "balance": "299999998012000"
+                }
+              }
+            }
+          }
+        },
+        {
+          "cursor": "Mw==",
+          "node": {
+            "address": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+            "version": 3,
+            "objectBcs": "AAEBAwAAAAAAAAAosNgmeGrTdLnm552kotbI1fI8QTrrdvoLB+VjbRc6So+IAUEx2RABAAD8zJpCG7sTwaZqGqmPCtdQKe3pSFd3nGkVtE+UBouSHiD6FI7qFOG82xiVHssHzhIk0CCxUyyTaH0/4jiIYySJs2ATDwAAAAAA",
+            "asMoveObject": {
+              "contents": {
+                "type": {
+                  "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+                },
+                "json": {
+                  "id": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+                  "balance": "299999997002120"
+                }
+              }
+            }
+          }
+        },
+        {
+          "cursor": "NA==",
+          "node": {
+            "address": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+            "version": 4,
+            "objectBcs": "AAEBBAAAAAAAAAAosNgmeGrTdLnm552kotbI1fI8QTrrdvoLB+VjbRc6So+wmDEx2RABAAD8zJpCG7sTwaZqGqmPCtdQKe3pSFd3nGkVtE+UBouSHiDb07MntHNCXXXTRU00dK7cTjF28bKRmkocnE8VC6h8FGATDwAAAAAA",
+            "asMoveObject": {
+              "contents": {
+                "type": {
+                  "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+                },
+                "json": {
+                  "id": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+                  "balance": "299999995992240"
+                }
+              }
+            }
+          }
+        },
+        {
+          "cursor": "NQ==",
+          "node": {
+            "address": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+            "version": 5,
+            "objectBcs": "AAEBBQAAAAAAAAAosNgmeGrTdLnm552kotbI1fI8QTrrdvoLB+VjbRc6So/YLyIx2RABAAD8zJpCG7sTwaZqGqmPCtdQKe3pSFd3nGkVtE+UBouSHiAnhTfr4/qsUmrGJj+IusYE0Fne93cVZya5xQ72gQAFrGATDwAAAAAA",
+            "asMoveObject": {
+              "contents": {
+                "type": {
+                  "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+                },
+                "json": {
+                  "id": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+                  "balance": "299999994982360"
+                }
+              }
+            }
+          }
+        },
+        {
+          "cursor": "Ng==",
+          "node": {
+            "address": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+            "version": 6,
+            "objectBcs": "AAEBBgAAAAAAAAAosNgmeGrTdLnm552kotbI1fI8QTrrdvoLB+VjbRc6So8AxxIx2RABAAD8zJpCG7sTwaZqGqmPCtdQKe3pSFd3nGkVtE+UBouSHiDbkSuVCe5f5Q3LNuwrw9hvRExrD9z+0IrNqRG5j8qYUGATDwAAAAAA",
+            "asMoveObject": {
+              "contents": {
+                "type": {
+                  "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+                },
+                "json": {
+                  "id": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f",
+                  "balance": "299999993972480"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
+task 10, lines 58-69:
+//# run-graphql
+Response: {
+  "data": {
+    "objectVersions": {
+      "pageInfo": {
+        "hasPreviousPage": false,
+        "hasNextPage": true,
+        "startCursor": "MQ==",
+        "endCursor": "Mw=="
+      },
+      "nodes": [
+        {
+          "version": 1
+        },
+        {
+          "version": 2
+        },
+        {
+          "version": 3
+        }
+      ]
+    }
+  }
+}
+
+task 11, lines 71-82:
+//# run-graphql
+Response: {
+  "data": {
+    "objectVersions": {
+      "pageInfo": {
+        "hasPreviousPage": true,
+        "hasNextPage": false,
+        "startCursor": "NA==",
+        "endCursor": "Ng=="
+      },
+      "nodes": [
+        {
+          "version": 4
+        },
+        {
+          "version": 5
+        },
+        {
+          "version": 6
+        }
+      ]
+    }
+  }
+}
+
+task 12, lines 84-95:
+//# run-graphql --cursors 1
+Response: {
+  "data": {
+    "objectVersions": {
+      "pageInfo": {
+        "hasPreviousPage": true,
+        "hasNextPage": true,
+        "startCursor": "Mg==",
+        "endCursor": "NA=="
+      },
+      "nodes": [
+        {
+          "version": 2
+        },
+        {
+          "version": 3
+        },
+        {
+          "version": 4
+        }
+      ]
+    }
+  }
+}
+
+task 13, lines 97-108:
+//# run-graphql --cursors 4
+Response: {
+  "data": {
+    "objectVersions": {
+      "pageInfo": {
+        "hasPreviousPage": true,
+        "hasNextPage": false,
+        "startCursor": "NQ==",
+        "endCursor": "Ng=="
+      },
+      "nodes": [
+        {
+          "version": 5
+        },
+        {
+          "version": 6
+        }
+      ]
+    }
+  }
+}
+
+task 14, lines 110-121:
+//# run-graphql --cursors 4
+Response: {
+  "data": {
+    "objectVersions": {
+      "pageInfo": {
+        "hasPreviousPage": true,
+        "hasNextPage": false,
+        "startCursor": "NQ==",
+        "endCursor": "Ng=="
+      },
+      "nodes": [
+        {
+          "version": 5
+        },
+        {
+          "version": 6
+        }
+      ]
+    }
+  }
+}
+
+task 15, lines 123-134:
+//# run-graphql --cursors 5
+Response: {
+  "data": {
+    "objectVersions": {
+      "pageInfo": {
+        "hasPreviousPage": true,
+        "hasNextPage": true,
+        "startCursor": "Mg==",
+        "endCursor": "NA=="
+      },
+      "nodes": [
+        {
+          "version": 2
+        },
+        {
+          "version": 3
+        },
+        {
+          "version": 4
+        }
+      ]
+    }
+  }
+}
+
+task 16, lines 136-147:
+//# run-graphql --cursors 5
+Response: {
+  "data": {
+    "objectVersions": {
+      "pageInfo": {
+        "hasPreviousPage": false,
+        "hasNextPage": true,
+        "startCursor": "MQ==",
+        "endCursor": "Mw=="
+      },
+      "nodes": [
+        {
+          "version": 1
+        },
+        {
+          "version": 2
+        },
+        {
+          "version": 3
+        }
+      ]
+    }
+  }
+}
+
+task 17, lines 149-160:
+//# run-graphql --cursors 2
+Response: {
+  "data": {
+    "objectVersions": {
+      "pageInfo": {
+        "hasPreviousPage": false,
+        "hasNextPage": true,
+        "startCursor": "MQ==",
+        "endCursor": "MQ=="
+      },
+      "nodes": [
+        {
+          "version": 1
+        }
+      ]
+    }
+  }
+}
+
+task 18, lines 162-173:
+//# run-graphql --cursors 2
+Response: {
+  "data": {
+    "objectVersions": {
+      "pageInfo": {
+        "hasPreviousPage": false,
+        "hasNextPage": true,
+        "startCursor": "MQ==",
+        "endCursor": "MQ=="
+      },
+      "nodes": [
+        {
+          "version": 1
+        }
+      ]
+    }
+  }
+}
+
+task 19, lines 175-186:
+//# run-graphql --cursors 1 4
+Response: {
+  "data": {
+    "objectVersions": {
+      "pageInfo": {
+        "hasPreviousPage": true,
+        "hasNextPage": true,
+        "startCursor": "Mg==",
+        "endCursor": "Mw=="
+      },
+      "nodes": [
+        {
+          "version": 2
+        },
+        {
+          "version": 3
+        }
+      ]
+    }
+  }
+}
+
+task 20, lines 188-199:
+//# run-graphql --cursors 1 4
+Response: {
+  "data": {
+    "objectVersions": {
+      "pageInfo": {
+        "hasPreviousPage": true,
+        "hasNextPage": true,
+        "startCursor": "Mg==",
+        "endCursor": "Mg=="
+      },
+      "nodes": [
+        {
+          "version": 2
+        }
+      ]
+    }
+  }
+}
+
+task 21, lines 201-212:
+//# run-graphql --cursors 1 4
+Response: {
+  "data": {
+    "objectVersions": {
+      "pageInfo": {
+        "hasPreviousPage": true,
+        "hasNextPage": true,
+        "startCursor": "Mw==",
+        "endCursor": "Mw=="
+      },
+      "nodes": [
+        {
+          "version": 3
+        }
+      ]
+    }
+  }
+}
+
+task 22, lines 214-225:
+//# run-graphql
+Response: {
+  "data": {
+    "object": {
+      "objectVersionsBefore": {
+        "nodes": [
+          {
+            "version": 1
+          },
+          {
+            "version": 2
+          }
+        ]
+      },
+      "version": 3,
+      "objectVersionsAfter": {
+        "nodes": [
+          {
+            "version": 4
+          },
+          {
+            "version": 5
+          },
+          {
+            "version": 6
+          }
+        ]
+      }
+    }
+  }
+}
