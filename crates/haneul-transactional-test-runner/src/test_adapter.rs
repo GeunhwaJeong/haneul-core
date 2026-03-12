@@ -1,0 +1,2931 @@
+// Copyright (c) Mysten Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+//! This module contains the transactional test runner instantiation for the Haneul adapter
+
+use crate::offchain_state::OffchainStateReader;
+use crate::simulator_persisted_store::PersistedStore;
+use crate::{TransactionalAdapter, ValidatorWithFullnode, cursor};
+use crate::{args::*, programmable_transaction_test_parser::parser::ParsedCommand};
+use anyhow::{Context, anyhow, bail};
+use async_trait::async_trait;
+use bimap::btree::BiBTreeMap;
+use criterion::Criterion;
+use fastcrypto::encoding::{Base64, Encoding};
+use fastcrypto::traits::KeyPair;
+use iso8601::Duration as IsoDuration;
+use move_binary_format::CompiledModule;
+use move_bytecode_utils::module_cache::GetModule;
+use move_command_line_common::error_bitset::ErrorBitset;
+use move_command_line_common::files::verify_and_create_named_address_mapping;
+use move_compiler::{
+    Flags, PreCompiledProgramInfo,
+    editions::{Edition, Flavor},
+    shared::{NumberFormat, NumericalAddress, PackageConfig, PackagePaths},
+};
+use move_core_types::ident_str;
+use move_core_types::parsing::address::ParsedAddress;
+use move_core_types::{
+    account_address::AccountAddress,
+    identifier::IdentStr,
+    language_storage::{ModuleId, TypeTag},
+};
+use move_symbol_pool::Symbol;
+use move_transactional_test_runner::framework::MaybeNamedCompiledModule;
+use move_transactional_test_runner::tasks::TaskCommand;
+use move_transactional_test_runner::{
+    framework::{CompiledState, MoveTestAdapter, compile_any, store_modules},
+    tasks::{InitCommand, RunCommand, SyntaxChoice, TaskInput},
+};
+use move_vm_runtime::session::SerializedReturnValues;
+use once_cell::sync::Lazy;
+use rand::{Rng, SeedableRng, rngs::StdRng};
+use serde::Deserialize;
+use serde_json::Value;
+use std::borrow::Cow;
+use std::collections::HashSet;
+use std::fmt::{self, Write};
+use std::path::PathBuf;
+use std::time::Duration;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::Path,
+    sync::Arc,
+};
+use haneul_core::authority::AuthorityState;
+use haneul_core::authority::shared_object_version_manager::AssignedVersions;
+use haneul_core::authority::test_authority_builder::TestAuthorityBuilder;
+use haneul_framework::DEFAULT_FRAMEWORK_PATH;
+use haneul_json_rpc_api::QUERY_MAX_RESULT_LIMIT;
+use haneul_json_rpc_types::{
+    DevInspectResults, DryRunTransactionBlockResponse, HaneulAccumulatorOperation, HaneulExecutionStatus,
+    HaneulTransactionBlockEffects, HaneulTransactionBlockEffectsAPI, HaneulTransactionBlockEvents,
+};
+use haneul_protocol_config::{
+    Chain, ExecutionTimeEstimateParams, PerObjectCongestionControlMode, ProtocolConfig,
+    ProtocolVersion,
+};
+use haneul_storage::{
+    key_value_store::TransactionKeyValueStore, key_value_store_metrics::KeyValueStoreMetrics,
+};
+use haneul_swarm_config::genesis_config::AccountConfig;
+use haneul_swarm_config::network_config_builder::KeyPairWrapper;
+use haneul_types::base_types::{SequenceNumber, VersionNumber};
+use haneul_types::committee::EpochId;
+use haneul_types::crypto::{
+    AuthorityKeyPair, AuthorityPublicKeyBytes, RandomnessRound, get_authority_key_pair,
+};
+use haneul_types::digests::{ConsensusCommitDigest, TransactionDigest};
+use haneul_types::effects::{
+    AccumulatorOperation, TransactionEffects, TransactionEffectsAPI, TransactionEvents,
+};
+use haneul_types::execution_status::ExecutionFailureStatus;
+use haneul_types::messages_checkpoint::{
+    CheckpointContents, CheckpointContentsDigest, CheckpointSequenceNumber, VerifiedCheckpoint,
+};
+use haneul_types::messages_consensus::ConsensusDeterminedVersionAssignments;
+use haneul_types::object::bounded_visitor::BoundedVisitor;
+use haneul_types::storage::ReadStore;
+use haneul_types::storage::{ObjectStore, RpcStateReader};
+use haneul_types::transaction::Command;
+use haneul_types::transaction::ProgrammableTransaction;
+use haneul_types::utils::to_sender_signed_transaction_with_multi_signers;
+use haneul_types::{BRIDGE_ADDRESS, MOVE_STDLIB_PACKAGE_ID};
+use haneul_types::{DEEPBOOK_ADDRESS, HANEUL_DENY_LIST_OBJECT_ID};
+use haneul_types::{DEEPBOOK_PACKAGE_ID, HANEUL_RANDOMNESS_STATE_OBJECT_ID};
+use haneul_types::{
+    MOVE_STDLIB_ADDRESS, HANEUL_ACCUMULATOR_ROOT_OBJECT_ID, HANEUL_CLOCK_OBJECT_ID,
+    HANEUL_FRAMEWORK_ADDRESS, HANEUL_SYSTEM_STATE_OBJECT_ID,
+    base_types::{ObjectID, ObjectRef, HANEUL_ADDRESS_LENGTH, HaneulAddress},
+    crypto::{AccountKeyPair, get_key_pair_from_rng},
+    event::Event,
+    object::{self, Object},
+    transaction::{Transaction, TransactionData, VerifiedTransaction},
+};
+use haneul_types::{
+    HANEUL_COIN_REGISTRY_OBJECT_ID, HANEUL_FRAMEWORK_PACKAGE_ID, HANEUL_SYSTEM_ADDRESS,
+    programmable_transaction_builder::ProgrammableTransactionBuilder,
+};
+use haneul_types::{HANEUL_SYSTEM_PACKAGE_ID, utils::to_sender_signed_transaction};
+use haneul_types::{execution_status::ExecutionStatus, transaction::TransactionKind};
+use haneul_types::{gas::GasCostSummary, object::GAS_VALUE_FOR_TESTING};
+use haneul_types::{
+    move_package::MovePackage,
+    transaction::{Argument, CallArg, TransactionDataAPI, TransactionExpiration},
+};
+use tempfile::{NamedTempFile, tempdir};
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum FakeID {
+    Known(ObjectID),
+    Enumerated(u64, u64),
+}
+
+const DEFAULT_GAS_PRICE: u64 = 1_000;
+
+const WELL_KNOWN_OBJECTS: &[ObjectID] = &[
+    MOVE_STDLIB_PACKAGE_ID,
+    DEEPBOOK_PACKAGE_ID,
+    HANEUL_FRAMEWORK_PACKAGE_ID,
+    HANEUL_SYSTEM_PACKAGE_ID,
+    HANEUL_SYSTEM_STATE_OBJECT_ID,
+    HANEUL_CLOCK_OBJECT_ID,
+    HANEUL_DENY_LIST_OBJECT_ID,
+    HANEUL_RANDOMNESS_STATE_OBJECT_ID,
+    HANEUL_COIN_REGISTRY_OBJECT_ID,
+    HANEUL_ACCUMULATOR_ROOT_OBJECT_ID,
+];
+// TODO use the file name as a seed
+const RNG_SEED: [u8; 32] = [
+    21, 23, 199, 200, 234, 250, 252, 178, 94, 15, 202, 178, 62, 186, 88, 137, 233, 192, 130, 157,
+    179, 179, 65, 9, 31, 249, 221, 123, 225, 112, 199, 247,
+];
+
+const DEFAULT_GAS_BUDGET: u64 = 5_000_000_000;
+const GAS_FOR_TESTING: u64 = GAS_VALUE_FOR_TESTING;
+
+const DEFAULT_CHAIN_START_TIMESTAMP: u64 = 0;
+
+pub struct HaneulTestAdapter {
+    pub(crate) compiled_state: CompiledState,
+    /// For upgrades: maps an upgraded package name to the original package name.
+    package_upgrade_mapping: BTreeMap<Symbol, Symbol>,
+    accounts: BTreeMap<String, TestAccount>,
+    default_account: TestAccount,
+    default_syntax: SyntaxChoice,
+    object_enumeration: BiBTreeMap<ObjectID, FakeID>,
+    /// Mapping from task ID to a transaction digest, for use in named variable substitution.
+    digest_enumeration: BTreeMap<u64, TransactionDigest>,
+    next_fake: (u64, u64),
+    gas_price: u64,
+    pub(crate) staged_modules: BTreeMap<Symbol, StagedPackage>,
+    is_simulator: bool,
+    pub(crate) executor: Box<dyn TransactionalAdapter>,
+    /// If `is_simulator` is true, the executor will be a `Simulacrum`, and this will be a
+    /// `RpcStateReader` that can be used to spawn the equivalent of a fullnode rest api. This can
+    /// then be used to serve an indexer that reads from said rest api service.
+    pub read_replica: Option<Arc<dyn RpcStateReader + Send + Sync>>,
+    /// Configuration for offchain state reader read from the file itself, and can be passed to the
+    /// specific indexing and reader flavor.
+    pub offchain_config: Option<OffChainConfig>,
+    /// A trait encapsulating methods to interact with offchain state.
+    pub offchain_reader: Option<Box<dyn OffchainStateReader>>,
+}
+
+/// Extra args related to configuring the indexer and reader.
+pub struct OffChainConfig {
+    pub consistent_range: usize,
+    /// Dir for simulacrum to write checkpoint files to. To be passed to the offchain indexer if it
+    /// uses file-based ingestion.
+    pub data_ingestion_path: PathBuf,
+    /// URL for the Haneul REST API. To be passed to the offchain indexer if it uses the REST API.
+    pub rest_api_url: Option<String>,
+}
+
+struct AdapterInitConfig {
+    additional_mapping: BTreeMap<String, NumericalAddress>,
+    account_names: BTreeSet<String>,
+    protocol_config: ProtocolConfig,
+    is_simulator: bool,
+    num_custom_validator_accounts: u64,
+    reference_gas_price: Option<u64>,
+    default_gas_price: Option<u64>,
+    flavor: Option<Flavor>,
+    /// Configuration for offchain state reader read from the file itself, and can be passed to the
+    /// specific indexing and reader flavor.
+    offchain_config: Option<OffChainConfig>,
+}
+
+pub(crate) struct StagedPackage {
+    file: NamedTempFile,
+    syntax: SyntaxChoice,
+    modules: Vec<MaybeNamedCompiledModule>,
+    pub(crate) digest: Vec<u8>,
+}
+
+#[derive(Debug)]
+struct TestAccount {
+    address: HaneulAddress,
+    key_pair: AccountKeyPair,
+    gas: ObjectID,
+}
+
+#[derive(Debug)]
+struct TxnSummary {
+    created: Vec<ObjectID>,
+    mutated: Vec<ObjectID>,
+    unwrapped: Vec<ObjectID>,
+    deleted: Vec<ObjectID>,
+    unwrapped_then_deleted: Vec<ObjectID>,
+    wrapped: Vec<ObjectID>,
+    unchanged_shared: Vec<ObjectID>,
+    events: Vec<Event>,
+    accumulators_written: Vec<(ObjectID, HaneulAddress, TypeTag, AccumulatorOperation)>,
+    gas_summary: GasCostSummary,
+}
+
+impl AdapterInitConfig {
+    fn from_args(init_cmd: InitCommand, haneul_args: HaneulInitArgs) -> Self {
+        let InitCommand { named_addresses } = init_cmd;
+        let HaneulInitArgs {
+            accounts,
+            protocol_version,
+            max_gas,
+            shared_object_deletion,
+            simulator,
+            num_custom_validator_accounts,
+            reference_gas_price,
+            default_gas_price,
+            flavor,
+            consistent_range,
+            data_ingestion_path,
+            rest_api_url,
+            enable_accumulators,
+            enable_authenticated_event_streams,
+            allow_references_in_ptbs,
+            enable_non_exclusive_writes,
+            enable_address_balance_gas_payments,
+        } = haneul_args;
+
+        let map = verify_and_create_named_address_mapping(named_addresses).unwrap();
+        let accounts = accounts
+            .map(|v| v.into_iter().collect::<BTreeSet<_>>())
+            .unwrap_or_default();
+
+        let mut protocol_config = if let Some(protocol_version) = protocol_version {
+            assert!(
+                protocol_version <= ProtocolVersion::max().as_u64(),
+                "Cannot set the protocol version to {}, since it is higher than the max version {}",
+                protocol_version,
+                ProtocolVersion::max().as_u64(),
+            );
+            assert!(
+                protocol_version != ProtocolVersion::max().as_u64(),
+                "Do not set the protocol version to the max {}. It can lead to unanticipated test changes once the max version is bumped. Instead, leave it unset to always use the max version.",
+                protocol_version,
+            );
+            ProtocolConfig::get_for_version(protocol_version.into(), Chain::Unknown)
+        } else {
+            ProtocolConfig::get_for_max_version_UNSAFE()
+        };
+        if enable_accumulators {
+            protocol_config.enable_accumulators_for_testing();
+        }
+        if enable_authenticated_event_streams {
+            protocol_config.enable_authenticated_event_streams_for_testing();
+        }
+        if allow_references_in_ptbs {
+            protocol_config.allow_references_in_ptbs_for_testing();
+        }
+        if enable_non_exclusive_writes {
+            protocol_config.enable_non_exclusive_writes_for_testing();
+        }
+        if let Some(enable) = shared_object_deletion {
+            protocol_config.set_shared_object_deletion_for_testing(enable);
+        }
+        if enable_address_balance_gas_payments {
+            protocol_config.enable_address_balance_gas_payments_for_testing();
+        }
+        // Older protocol versions use deprecated congestion control modes. Override to use
+        // ExecutionTimeEstimate mode which is the only supported mode.
+        if !matches!(
+            protocol_config.per_object_congestion_control_mode(),
+            PerObjectCongestionControlMode::ExecutionTimeEstimate(_)
+        ) {
+            protocol_config.set_per_object_congestion_control_mode_for_testing(
+                PerObjectCongestionControlMode::ExecutionTimeEstimate(
+                    ExecutionTimeEstimateParams::default(),
+                ),
+            );
+        }
+        if let Some(mx_tx_gas_override) = max_gas {
+            if simulator {
+                panic!("Cannot set max gas in simulator mode");
+            }
+            protocol_config.set_max_tx_gas_for_testing(mx_tx_gas_override)
+        }
+        let num_custom_validator_accounts = num_custom_validator_accounts.unwrap_or(0);
+        if num_custom_validator_accounts > 0 && !simulator {
+            panic!("Can only set custom validator account in simulator mode");
+        }
+        if reference_gas_price.is_some() && !simulator {
+            panic!("Can only set reference gas price in simulator mode");
+        }
+
+        let offchain_config = if simulator {
+            Some(OffChainConfig {
+                consistent_range,
+                data_ingestion_path: data_ingestion_path.unwrap_or(tempdir().unwrap().keep()),
+                rest_api_url,
+            })
+        } else {
+            None
+        };
+
+        Self {
+            additional_mapping: map,
+            account_names: accounts,
+            protocol_config,
+            is_simulator: simulator,
+            num_custom_validator_accounts,
+            reference_gas_price,
+            default_gas_price,
+            flavor,
+            offchain_config,
+        }
+    }
+}
+
+#[async_trait]
+impl MoveTestAdapter<'_> for HaneulTestAdapter {
+    type ExtraPublishArgs = HaneulPublishArgs;
+    type ExtraRunArgs = HaneulRunArgs;
+    type ExtraInitArgs = HaneulInitArgs;
+    type ExtraValueArgs = HaneulExtraValueArgs;
+    type Subcommand = HaneulSubcommand<Self::ExtraValueArgs, Self::ExtraRunArgs>;
+
+    fn render_command_input(
+        &self,
+        task: &TaskInput<
+            TaskCommand<
+                Self::ExtraInitArgs,
+                Self::ExtraPublishArgs,
+                Self::ExtraValueArgs,
+                Self::ExtraRunArgs,
+                Self::Subcommand,
+            >,
+        >,
+    ) -> Option<String> {
+        match &task.command {
+            TaskCommand::Subcommand(HaneulSubcommand::ProgrammableTransaction(..)) => {
+                let data_str = std::fs::read_to_string(task.data.as_ref()?)
+                    .ok()?
+                    .trim()
+                    .to_string();
+                Some(format!("{}\n{}", task.task_text, data_str))
+            }
+            TaskCommand::Init(_, _)
+            | TaskCommand::PrintBytecode(_)
+            | TaskCommand::Publish(_, _)
+            | TaskCommand::Run(_, _)
+            | TaskCommand::Subcommand(..) => None,
+        }
+    }
+
+    fn compiled_state(&mut self) -> &mut CompiledState {
+        &mut self.compiled_state
+    }
+
+    fn default_syntax(&self) -> SyntaxChoice {
+        self.default_syntax
+    }
+
+    async fn init(
+        default_syntax: SyntaxChoice,
+        pre_compiled_deps: Option<Arc<PreCompiledProgramInfo>>,
+        task_opt: Option<
+            move_transactional_test_runner::tasks::TaskInput<(
+                move_transactional_test_runner::tasks::InitCommand,
+                Self::ExtraInitArgs,
+            )>,
+        >,
+        _path: &Path,
+    ) -> (Self, Option<String>) {
+        let rng = StdRng::from_seed(RNG_SEED);
+        assert!(
+            pre_compiled_deps.is_some(),
+            "Must populate 'pre_compiled_deps' with Haneul framework"
+        );
+
+        // Unpack the init arguments
+        let AdapterInitConfig {
+            additional_mapping,
+            account_names,
+            protocol_config,
+            is_simulator,
+            num_custom_validator_accounts,
+            reference_gas_price,
+            default_gas_price,
+            flavor,
+            offchain_config,
+        } = match task_opt.map(|t| t.command) {
+            Some((init_cmd, haneul_args)) => AdapterInitConfig::from_args(init_cmd, haneul_args),
+            None => AdapterInitConfig::default(),
+        };
+
+        let (
+            executor,
+            AccountSetup {
+                default_account,
+                accounts,
+                named_address_mapping,
+                objects,
+                account_objects,
+            },
+            read_replica,
+        ) = if is_simulator {
+            init_sim_executor(
+                rng,
+                account_names,
+                additional_mapping,
+                &protocol_config,
+                num_custom_validator_accounts,
+                reference_gas_price,
+                offchain_config
+                    .as_ref()
+                    .unwrap()
+                    .data_ingestion_path
+                    .clone(),
+            )
+            .await
+        } else {
+            init_val_fullnode_executor(rng, account_names, additional_mapping, &protocol_config)
+                .await
+        };
+
+        let object_ids = objects.iter().map(|obj| obj.id()).collect::<Vec<_>>();
+
+        let mut test_adapter = Self {
+            is_simulator,
+            // This is opt-in and instantiated later
+            offchain_reader: None,
+            executor,
+            offchain_config,
+            read_replica,
+            compiled_state: CompiledState::new(
+                named_address_mapping,
+                pre_compiled_deps,
+                Some(NumericalAddress::new(
+                    AccountAddress::ZERO.into_bytes(),
+                    NumberFormat::Hex,
+                )),
+                Some(Edition::DEVELOPMENT),
+                flavor.or(Some(Flavor::Haneul)),
+            ),
+            package_upgrade_mapping: BTreeMap::new(),
+            accounts,
+            default_account,
+            default_syntax,
+            object_enumeration: BiBTreeMap::new(),
+            digest_enumeration: BTreeMap::new(),
+            next_fake: (0, 0),
+            // TODO: make this configurable
+            gas_price: default_gas_price.unwrap_or(DEFAULT_GAS_PRICE),
+            staged_modules: BTreeMap::new(),
+        };
+
+        for well_known in WELL_KNOWN_OBJECTS.iter().copied() {
+            test_adapter
+                .object_enumeration
+                .insert(well_known, FakeID::Known(well_known));
+        }
+        let mut output = String::new();
+        for (account, obj_id) in account_objects {
+            let fake = test_adapter.enumerate_fake(obj_id);
+            if !output.is_empty() {
+                output.push_str(", ")
+            }
+            write!(output, "{}: object({})", account, fake).unwrap()
+        }
+        for object_id in object_ids {
+            test_adapter.enumerate_fake(object_id);
+        }
+        let output = if output.is_empty() {
+            None
+        } else {
+            Some(output)
+        };
+        (test_adapter, output)
+    }
+
+    async fn publish_modules(
+        &mut self,
+        modules: Vec<MaybeNamedCompiledModule>,
+        gas_budget: Option<u64>,
+        extra: Self::ExtraPublishArgs,
+    ) -> anyhow::Result<(Option<String>, Vec<MaybeNamedCompiledModule>)> {
+        self.next_task();
+        let HaneulPublishArgs {
+            sender,
+            upgradeable,
+            dependencies,
+            gas_price,
+            dry_run,
+        } = extra;
+        let named_addr_opt = modules.first().unwrap().named_address;
+        let first_module_name = modules.first().unwrap().module.self_id().name().to_string();
+        let modules_bytes = modules
+            .iter()
+            .map(|m| {
+                let mut module_bytes = vec![];
+                m.module
+                    .serialize_with_version(m.module.version, &mut module_bytes)
+                    .unwrap();
+                Ok(module_bytes)
+            })
+            .collect::<anyhow::Result<_>>()?;
+        let gas_budget = gas_budget.unwrap_or(DEFAULT_GAS_BUDGET);
+        let mapping = &self.compiled_state.named_address_mapping;
+        let mut dependencies: Vec<_> = dependencies
+            .into_iter()
+            .map(|d| {
+                let Some(addr) = mapping.get(&d) else {
+                    bail!("There is no published module address corresponding to name address {d}");
+                };
+                let id: ObjectID = addr.into_inner().into();
+                Ok(id)
+            })
+            .collect::<Result<_, _>>()?;
+        let gas_price = gas_price.unwrap_or(self.gas_price);
+        // we are assuming that all packages depend on Move Stdlib and Haneul Framework, so these
+        // don't have to be provided explicitly as parameters
+        dependencies.extend([MOVE_STDLIB_PACKAGE_ID, HANEUL_FRAMEWORK_PACKAGE_ID]);
+
+        if dry_run {
+            let sender_acc = self.get_sender(sender.clone());
+            let sender_address = sender_acc.address;
+
+            let mut builder = ProgrammableTransactionBuilder::new();
+            if upgradeable {
+                let cap = builder.publish_upgradeable(modules_bytes, dependencies);
+                builder.transfer_arg(sender_address, cap);
+            } else {
+                builder.publish_immutable(modules_bytes, dependencies);
+            };
+            let pt = builder.finish();
+            let payments = self.get_payments(sender_acc, vec![]);
+
+            let transaction = TransactionData::new_programmable(
+                sender_acc.address,
+                payments.clone(),
+                pt,
+                gas_budget,
+                gas_price,
+            );
+            let summary = self.dry_run(transaction).await?;
+            let output = self.object_summary_output(&summary, /* summarize */ false);
+
+            // do not pass back any modules for storage
+            return Ok((output, vec![]));
+        }
+
+        let data = |sender, gas| {
+            let mut builder = ProgrammableTransactionBuilder::new();
+            if upgradeable {
+                let cap = builder.publish_upgradeable(modules_bytes, dependencies);
+                builder.transfer_arg(sender, cap);
+            } else {
+                builder.publish_immutable(modules_bytes, dependencies);
+            };
+            let pt = builder.finish();
+            TransactionData::new_programmable(sender, gas, pt, gas_budget, gas_price)
+        };
+        let transaction = self.sign_txn(sender, data);
+        let summary = self.execute_txn(transaction).await?;
+        let created_package = summary
+            .created
+            .iter()
+            .find_map(|id| {
+                let object = self.get_object(id, None).unwrap();
+                let package = object.data.try_as_package()?;
+                if package
+                    .serialized_module_map()
+                    .get(&first_module_name)
+                    .is_some()
+                {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        let package_addr = NumericalAddress::new(created_package.into_bytes(), NumberFormat::Hex);
+        if let Some(named_addr) = named_addr_opt {
+            let prev_package = self
+                .compiled_state
+                .named_address_mapping
+                .insert(named_addr.to_string(), package_addr);
+            match prev_package.map(|a| a.into_inner()) {
+                Some(addr) if addr != AccountAddress::ZERO => panic!(
+                    "Cannot reuse named address '{}' for multiple packages. \
+                It should be set to 0 initially",
+                    named_addr
+                ),
+                _ => (),
+            }
+        }
+        let output = self.object_summary_output(&summary, /* summarize */ false);
+        let published_modules = self
+            .get_object(&created_package, None)
+            .unwrap()
+            .data
+            .try_as_package()
+            .unwrap()
+            .serialized_module_map()
+            .values()
+            .map(|published_module_bytes| MaybeNamedCompiledModule {
+                named_address: named_addr_opt,
+                module: CompiledModule::deserialize_with_defaults(published_module_bytes).unwrap(),
+                source_map: None,
+            })
+            .collect();
+        Ok((output, published_modules))
+    }
+
+    async fn call_function(
+        &mut self,
+        module_id: &ModuleId,
+        function: &IdentStr,
+        type_args: Vec<TypeTag>,
+        signers: Vec<ParsedAddress>,
+        args: Vec<HaneulValue>,
+        gas_budget: Option<u64>,
+        extra: Self::ExtraRunArgs,
+    ) -> anyhow::Result<(Option<String>, SerializedReturnValues)> {
+        self.next_task();
+        let HaneulRunArgs { summarize, .. } = extra;
+        let transaction = self.build_function_call_tx(
+            module_id, function, type_args, signers, args, gas_budget, extra,
+        )?;
+        let summary = self.execute_txn(transaction).await?;
+        let output = self.object_summary_output(&summary, summarize);
+        let empty = SerializedReturnValues {
+            mutable_reference_outputs: vec![],
+            return_values: vec![],
+        };
+        Ok((output, empty))
+    }
+
+    async fn handle_subcommand(
+        &mut self,
+        task: TaskInput<Self::Subcommand>,
+    ) -> anyhow::Result<Option<String>> {
+        self.next_task();
+        let TaskInput {
+            command,
+            name,
+            number,
+            start_line,
+            command_lines_stop,
+            stop_line,
+            data,
+            task_text,
+        } = task;
+        macro_rules! get_obj {
+            ($fake_id:ident, $version:expr) => {{
+                let id = match self.fake_to_real_object_id($fake_id) {
+                    None => bail!(
+                        "task {}, lines {}-{}\n{}\n. Unbound fake id {}",
+                        number,
+                        start_line,
+                        command_lines_stop,
+                        task_text,
+                        $fake_id
+                    ),
+                    Some(res) => res,
+                };
+                match self.get_object(&id, $version) {
+                    Err(_) => return Ok(Some(format!("No object at id {}", $fake_id))),
+                    Ok(obj) => obj,
+                }
+            }};
+            ($fake_id:ident) => {{ get_obj!($fake_id, None) }};
+        }
+        match command {
+            HaneulSubcommand::RunGraphql(RunGraphqlCommand {
+                show_usage,
+                show_headers,
+                show_service_version,
+                wait_for_checkpoint_pruned,
+                cursors,
+            }) => {
+                let file = data.ok_or_else(|| anyhow::anyhow!("Missing GraphQL query"))?;
+                let contents = std::fs::read_to_string(file.path())?;
+                let offchain_reader = self
+                    .offchain_reader
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("Offchain reader not set"))?;
+                let highest_checkpoint = self.executor.get_latest_checkpoint_sequence_number()?;
+                offchain_reader
+                    .wait_for_checkpoint_catchup(highest_checkpoint, Duration::from_secs(60))
+                    .await;
+
+                if let Some(checkpoint_to_prune) = wait_for_checkpoint_pruned {
+                    offchain_reader
+                        .wait_for_pruned_checkpoint(checkpoint_to_prune, Duration::from_secs(60))
+                        .await;
+                }
+
+                let interpolated =
+                    self.interpolate_query(&contents, &cursors, highest_checkpoint)?;
+                let resp = offchain_reader
+                    .execute_graphql(interpolated.trim().to_owned(), show_usage)
+                    .await?;
+
+                let mut output = vec![];
+                if show_headers {
+                    let headers_map: BTreeMap<_, _> = resp
+                        .http_headers
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|(h, v)| Some((h?.to_string(), v)))
+                        .collect();
+                    output.push(format!("Headers: {headers_map:#?}"));
+                }
+                if show_service_version {
+                    output.push(format!(
+                        "Service version: {}",
+                        resp.service_version.unwrap()
+                    ));
+                }
+                output.push(format!("Response: {}", resp.response_body));
+
+                Ok(Some(output.join("\n")))
+            }
+            HaneulSubcommand::RunJsonRpc(RunJsonRpcCommand {
+                show_headers,
+                cursors,
+            }) => {
+                let file = data.ok_or_else(|| anyhow::anyhow!("Missing JSON-RPC query"))?;
+                let contents = std::fs::read_to_string(file.path())?;
+
+                let offchain_reader = self
+                    .offchain_reader
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("Offchain reader not set"))?;
+
+                let highest_checkpoint = self.executor.get_latest_checkpoint_sequence_number()?;
+                offchain_reader
+                    .wait_for_checkpoint_catchup(highest_checkpoint, Duration::from_secs(60))
+                    .await;
+
+                let interpolated =
+                    self.interpolate_query(&contents, &cursors, highest_checkpoint)?;
+
+                #[derive(Deserialize)]
+                struct Query {
+                    method: String,
+                    params: Value,
+                }
+
+                let query: Query = serde_json::from_str(&interpolated)
+                    .context("Failed to parse JSON-RPC query")?;
+
+                let resp = offchain_reader
+                    .execute_jsonrpc(query.method, query.params)
+                    .await?;
+
+                let mut output = String::new();
+
+                if show_headers {
+                    let headers_map: BTreeMap<_, _> = resp
+                        .http_headers
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|(h, v)| Some((h?.to_string(), v)))
+                        .collect();
+                    write!(&mut output, "Headers: {headers_map:#?}\n\n").unwrap();
+                }
+
+                write!(&mut output, "Response: {}", resp.response_body).unwrap();
+                Ok(Some(output))
+            }
+            HaneulSubcommand::ViewCheckpoint => {
+                let latest_chk = self.executor.get_latest_checkpoint_sequence_number()?;
+                let chk = self
+                    .executor
+                    .get_checkpoint_by_sequence_number(latest_chk)
+                    .unwrap();
+                Ok(Some(format!("{}", chk.data())))
+            }
+            HaneulSubcommand::CreateCheckpoint(CreateCheckpointCommand { count }) => {
+                for _ in 0..count.unwrap_or(1) {
+                    self.executor.create_checkpoint().await?;
+                }
+                let latest_chk = self.executor.get_latest_checkpoint_sequence_number()?;
+                Ok(Some(format!("Checkpoint created: {}", latest_chk)))
+            }
+            HaneulSubcommand::AdvanceEpoch(cmd) => {
+                for _ in 0..cmd.count.unwrap_or(1) {
+                    self.executor.advance_epoch((&cmd).into()).await?;
+                }
+                let epoch = self.get_latest_epoch_id()?;
+                Ok(Some(format!("Epoch advanced: {epoch}")))
+            }
+            HaneulSubcommand::AdvanceClock(advance_clock_command) => {
+                let duration = match advance_clock_command {
+                    AdvanceClockCommand {
+                        duration: Some(_),
+                        duration_ns: Some(_),
+                    } => panic!("Must specify only one of `--duration` or `--duration_ns`"),
+                    AdvanceClockCommand {
+                        duration: Some(duration),
+                        duration_ns: None,
+                    } => duration.parse::<IsoDuration>().unwrap().into(),
+                    AdvanceClockCommand {
+                        duration: None,
+                        duration_ns: Some(duration_ns),
+                    } => Duration::from_nanos(duration_ns),
+                    AdvanceClockCommand {
+                        duration: None,
+                        duration_ns: None,
+                    } => panic!("Must specify either `--duration` or `--duration_ns`"),
+                };
+
+                let effects = self.executor.advance_clock(duration).await?;
+
+                // Add the transaction digest to digest_enumeration for variable substitution
+                let digest = effects.transaction_digest();
+                let task = self.next_fake.0;
+                if let Some(prev) = self.digest_enumeration.insert(task, *digest) {
+                    panic!(
+                        "Task {task} executed two transactions (expected at most one): {prev}, {digest}"
+                    );
+                }
+
+                Ok(None)
+            }
+            HaneulSubcommand::SetRandomState(SetRandomStateCommand {
+                randomness_round,
+                random_bytes,
+                randomness_initial_version,
+            }) => {
+                let random_bytes = Base64::decode(&random_bytes)
+                    .map_err(|e| anyhow!("Failed to decode random bytes as Base64: {e}"))?;
+
+                let latest_epoch = self.get_latest_epoch_id()?;
+                let tx = VerifiedTransaction::new_randomness_state_update(
+                    latest_epoch,
+                    RandomnessRound(randomness_round),
+                    random_bytes,
+                    SequenceNumber::from_u64(randomness_initial_version),
+                );
+
+                self.execute_txn(tx.into()).await?;
+                Ok(None)
+            }
+            HaneulSubcommand::AuthenticatorStateUpdate(AuthenticatorStateUpdateCommand {
+                round,
+                jwk_iss,
+                authenticator_obj_initial_shared_version,
+            }) => {
+                use fastcrypto_zkp::bn254::zk_login::{JWK, JwkId};
+                use haneul_types::authenticator_state::ActiveJwk;
+
+                let current_epoch = self.get_latest_epoch_id()?;
+
+                // Create ActiveJwk instances with auto-generated key IDs
+                // Example: --jwk-iss "google.com,microsoft.com"
+                // Results in: [(google.com, key1), (microsoft.com, key2)]
+                let active_jwks: Vec<ActiveJwk> = jwk_iss
+                    .iter()
+                    .enumerate()
+                    .map(|(index, iss)| ActiveJwk {
+                        jwk_id: JwkId::new(iss.clone(), format!("key{}", index + 1)),
+                        jwk: JWK {
+                            kty: "RSA".to_string(),
+                            e: "AQAB".to_string(),
+                            n: "test_modulus_value".to_string(),
+                            alg: "RS256".to_string(),
+                        },
+                        epoch: current_epoch,
+                    })
+                    .collect();
+
+                let auth_obj_version = authenticator_obj_initial_shared_version
+                    .map(SequenceNumber::from_u64)
+                    .unwrap_or_else(SequenceNumber::new);
+
+                let tx = VerifiedTransaction::new_authenticator_state_update(
+                    current_epoch,
+                    round,
+                    active_jwks,
+                    auth_obj_version,
+                );
+
+                self.execute_txn(tx.into()).await?;
+                Ok(Some(format!(
+                    "AuthenticatorStateUpdate executed at epoch {} round {}",
+                    current_epoch, round
+                )))
+            }
+            HaneulSubcommand::ViewObject(ViewObjectCommand {
+                id: fake_id,
+                hide_contents,
+            }) => {
+                let obj = get_obj!(fake_id);
+                Ok(Some(match &obj.data {
+                    object::Data::Move(move_obj) => {
+                        let layout = move_obj.get_layout(&&*self).unwrap();
+                        let move_struct =
+                            BoundedVisitor::deserialize_struct(move_obj.contents(), &layout)
+                                .unwrap();
+
+                        let msg =
+                            format!("Owner: {}\nVersion: {}", &obj.owner, obj.version().value());
+                        let msg = if hide_contents {
+                            format!("{msg}\nType: {:#}", &move_struct.type_)
+                        } else {
+                            format!("{msg}\nContents: {move_struct:#}",)
+                        };
+                        self.stabilize_str(msg)
+                    }
+                    object::Data::Package(package) => {
+                        let num_modules = package.serialized_module_map().len();
+                        let modules = package
+                            .serialized_module_map()
+                            .keys()
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        assert!(!modules.is_empty());
+                        if num_modules > 1 {
+                            format!("{}::{{{}}}", fake_id, modules)
+                        } else {
+                            format!("{}::{}", fake_id, modules)
+                        }
+                    }
+                }))
+            }
+            HaneulSubcommand::TransferObject(TransferObjectCommand {
+                id: fake_id,
+                recipient,
+                sender,
+                gas_budget,
+                gas_budget_from_address_balance,
+                gas_price,
+            }) => {
+                let mut builder = ProgrammableTransactionBuilder::new();
+                let obj_arg = HaneulValue::Object(fake_id, None).into_argument(&mut builder, self)?;
+                let recipient = match self.accounts.get(&recipient) {
+                    Some(test_account) => test_account.address,
+                    None => panic!("Unbound account {}", recipient),
+                };
+                let gas_price: u64 = gas_price.unwrap_or(self.gas_price);
+                let gas_budget = gas_budget_from_address_balance
+                    .or(gas_budget)
+                    .unwrap_or(DEFAULT_GAS_BUDGET);
+                let use_address_balance_gas = gas_budget_from_address_balance.is_some();
+                let transaction = self.sign_txn(sender, |sender, gas| {
+                    let rec_arg = builder.pure(recipient).unwrap();
+                    builder.command(haneul_types::transaction::Command::TransferObjects(
+                        vec![obj_arg],
+                        rec_arg,
+                    ));
+                    let pt = builder.finish();
+                    let gas = if use_address_balance_gas { vec![] } else { gas };
+                    TransactionData::new_programmable(sender, gas, pt, gas_budget, gas_price)
+                });
+                let summary = self.execute_txn(transaction).await?;
+                let output = self.object_summary_output(&summary, /* summarize */ false);
+                Ok(output)
+            }
+            HaneulSubcommand::ConsensusCommitPrologue(ConsensusCommitPrologueCommand {
+                timestamp_ms,
+            }) => {
+                let transaction = VerifiedTransaction::new_consensus_commit_prologue_v3(
+                    0,
+                    0,
+                    timestamp_ms,
+                    ConsensusCommitDigest::default(),
+                    ConsensusDeterminedVersionAssignments::empty_for_testing(),
+                );
+                let summary = self.execute_txn(transaction.into()).await?;
+                let output = self.object_summary_output(&summary, /* summarize */ false);
+                Ok(output)
+            }
+            HaneulSubcommand::ProgrammableTransaction(ProgrammableTransactionCommand {
+                sender,
+                sponsor,
+                gas_budget,
+                gas_budget_from_address_balance,
+                gas_price,
+                gas_payment,
+                dev_inspect,
+                dry_run,
+                expiration,
+                inputs,
+            }) => {
+                if dev_inspect && self.is_simulator() {
+                    bail!("Dev inspect is not supported on simulator mode");
+                }
+
+                if dry_run && dev_inspect {
+                    bail!("Cannot set both dev-inspect and dry-run");
+                }
+
+                let inputs = self.compiled_state().resolve_args(inputs)?;
+                let inputs: Vec<CallArg> = inputs
+                    .into_iter()
+                    .map(|arg| arg.into_call_arg(self))
+                    .collect::<anyhow::Result<_>>()?;
+                let file = data.ok_or_else(|| {
+                    anyhow::anyhow!("Missing commands for programmable transaction")
+                })?;
+                let contents = std::fs::read_to_string(file.path())?;
+                let commands = ParsedCommand::parse_vec(&contents)?;
+                let staged = &self.staged_modules;
+                let state = &self.compiled_state;
+                let commands = commands
+                    .into_iter()
+                    .map(|c| {
+                        c.into_command(
+                            &|p| {
+                                let modules = staged
+                                    .get(&Symbol::from(p))?
+                                    .modules
+                                    .iter()
+                                    .map(|m| {
+                                        let mut buf = vec![];
+                                        m.module
+                                            .serialize_with_version(m.module.version, &mut buf)
+                                            .unwrap();
+                                        buf
+                                    })
+                                    .collect();
+                                Some(modules)
+                            },
+                            &|s| Some(state.resolve_named_address(s)),
+                        )
+                    })
+                    .collect::<anyhow::Result<Vec<Command>>>()?;
+
+                if dev_inspect {
+                    assert!(
+                        gas_budget.is_none(),
+                        "Meaningless to set gas budget with dev-inspect"
+                    );
+                }
+
+                let gas_budget = gas_budget_from_address_balance
+                    .or(gas_budget)
+                    .unwrap_or(DEFAULT_GAS_BUDGET);
+                let use_address_balance_gas = gas_budget_from_address_balance.is_some();
+
+                let summary = if !dev_inspect && !dry_run {
+                    let gas_price = gas_price.unwrap_or(self.gas_price);
+                    let expiration = expiration
+                        .map(TransactionExpiration::Epoch)
+                        .unwrap_or(TransactionExpiration::None);
+                    let transaction = self.sign_sponsor_txn(
+                        sender,
+                        sponsor,
+                        gas_payment.unwrap_or_default(),
+                        |sender, sponsor, gas| {
+                            let gas = if use_address_balance_gas { vec![] } else { gas };
+                            let mut tx_data = TransactionData::new_programmable_allow_sponsor(
+                                sender,
+                                gas,
+                                ProgrammableTransaction { inputs, commands },
+                                gas_budget,
+                                gas_price,
+                                sponsor,
+                            );
+                            *tx_data.expiration_mut_for_testing() = expiration;
+                            tx_data
+                        },
+                    );
+                    self.execute_txn(transaction).await?
+                } else if dry_run {
+                    let gas_price = gas_price.unwrap_or(self.gas_price);
+                    let expiration = expiration
+                        .map(TransactionExpiration::Epoch)
+                        .unwrap_or(TransactionExpiration::None);
+                    let sender = self.get_sender(sender);
+                    let sponsor = sponsor.map_or(sender, |a| self.get_sender(Some(a)));
+
+                    let payments = if use_address_balance_gas {
+                        vec![]
+                    } else {
+                        self.get_payments(sponsor, gas_payment.unwrap_or_default())
+                    };
+
+                    let mut transaction = TransactionData::new_programmable(
+                        sender.address,
+                        payments,
+                        ProgrammableTransaction { inputs, commands },
+                        gas_budget,
+                        gas_price,
+                    );
+                    *transaction.expiration_mut_for_testing() = expiration;
+                    self.dry_run(transaction).await?
+                } else {
+                    let sender_address = self.get_sender(sender).address;
+                    let transaction =
+                        TransactionKind::ProgrammableTransaction(ProgrammableTransaction {
+                            inputs,
+                            commands,
+                        });
+                    self.dev_inspect(sender_address, transaction, gas_price)
+                        .await?
+                };
+                let output = self.object_summary_output(&summary, /* summarize */ false);
+                Ok(output)
+            }
+            HaneulSubcommand::UpgradePackage(UpgradePackageCommand {
+                package,
+                upgrade_capability,
+                dependencies,
+                sender,
+                gas_budget,
+                gas_budget_from_address_balance,
+                dry_run,
+                syntax,
+                policy,
+                gas_price,
+            }) => {
+                let syntax = syntax.unwrap_or_else(|| self.default_syntax());
+                // zero out the package name
+                let zero =
+                    NumericalAddress::new(AccountAddress::ZERO.into_bytes(), NumberFormat::Hex);
+                let before_upgrade = {
+                    // not binding `m` separately results in some strange async capture error
+                    let m = &mut self.compiled_state.named_address_mapping;
+                    let Some(before) = m.insert(package.clone(), zero) else {
+                        panic!("Unbound package '{package}' for upgrade");
+                    };
+                    before
+                };
+
+                // Override address mappings for compilation when upgrading. Each dependency is set to its
+                // original address (if that dependency had been upgraded previously). This ensures upgraded
+                // dependencies are resolved during compilation--without this workaround, the compiler will
+                // find multiple definitions of the same module). We persist the original package name and
+                // addresses, which we restore before performing an upgrade transaction below.
+                let mut original_package_addrs = vec![];
+                for dep in dependencies.iter() {
+                    let named_address_mapping = &mut self.compiled_state.named_address_mapping;
+                    let dep = &Symbol::from(dep.as_str());
+                    let Some(orig_package) = self.package_upgrade_mapping.get(dep) else {
+                        continue;
+                    };
+                    let Some(orig_package_address) =
+                        named_address_mapping.insert(orig_package.to_string(), zero)
+                    else {
+                        continue;
+                    };
+                    original_package_addrs.push((*orig_package, orig_package_address));
+                    let dep_address = named_address_mapping
+                        .insert(dep.to_string(), orig_package_address)
+                        .unwrap_or_else(||
+                            panic!("Internal error: expected dependency {dep} in map when overriding address.")
+                        );
+                    original_package_addrs.push((*dep, dep_address));
+                }
+                let gas_price = gas_price.unwrap_or(self.gas_price);
+                let gas_budget = gas_budget_from_address_balance
+                    .or(gas_budget)
+                    .unwrap_or(DEFAULT_GAS_BUDGET);
+                let use_address_balance_gas = gas_budget_from_address_balance.is_some();
+
+                let result = compile_any(
+                    self,
+                    "upgrade",
+                    syntax,
+                    name,
+                    number,
+                    start_line,
+                    command_lines_stop,
+                    stop_line,
+                    data,
+                    |adapter, modules| async {
+                        // Restore the original package addresses for dependencies before performing the upgrade.
+                        // This ensures package upgrades are properly linked at their correct addresses
+                        // (previously, addresses referred to the dependency's original package for compilation).
+                        for (name, addr) in original_package_addrs {
+                            adapter
+                                .compiled_state()
+                                .named_address_mapping
+                                .insert(name.to_string(), addr)
+                                .unwrap_or_else(|| panic!("Internal error: expected dependency {name} in map when restoring address."));
+                        }
+
+                        let upgraded_name = modules.first().unwrap().named_address.unwrap();
+                        let package = &Symbol::from(package.as_str());
+                        let original_name = adapter
+                            .package_upgrade_mapping
+                            .get(package)
+                            .unwrap_or(package);
+                        // Persist the upgraded package name with its original package name, so that we can
+                        // refer to the original package name when compiling (see above on overridden addresses).
+                        adapter
+                            .package_upgrade_mapping
+                            .insert(upgraded_name, *original_name);
+
+                        let output = adapter.upgrade_package(
+                            before_upgrade,
+                            &modules,
+                            upgrade_capability,
+                            dependencies,
+                            sender,
+                            gas_budget,
+                            dry_run,
+                            policy,
+                            gas_price,
+                            use_address_balance_gas,
+                        ).await?;
+                        Ok((output, modules))
+                    },
+                )
+                .await;
+                // if the package name was not updated, reset it to the value before the upgrade
+                let package_addr = self
+                    .compiled_state
+                    .named_address_mapping
+                    .get(&package)
+                    .unwrap();
+                if package_addr == &zero {
+                    self.compiled_state
+                        .named_address_mapping
+                        .insert(package, before_upgrade);
+                }
+                let (warnings_opt, output, data, modules) = result?;
+                // skip storing modules if this is a dry run
+                if !dry_run {
+                    store_modules(self, syntax, data, modules);
+                }
+                Ok(merge_output(warnings_opt, output))
+            }
+            HaneulSubcommand::StagePackage(StagePackageCommand {
+                syntax,
+                dependencies,
+            }) => {
+                let syntax = syntax.unwrap_or_else(|| self.default_syntax());
+                let (warnings_opt, output, data, modules) = compile_any(
+                    self,
+                    "upgrade",
+                    syntax,
+                    name,
+                    number,
+                    start_line,
+                    command_lines_stop,
+                    stop_line,
+                    data,
+                    |_adapter, modules| async { Ok((None, modules)) },
+                )
+                .await?;
+                assert!(!modules.is_empty());
+                let Some(package_name) = modules.first().unwrap().named_address else {
+                    bail!("Staged modules must have a named address")
+                };
+                for m in &modules {
+                    let Some(named_addr) = &m.named_address else {
+                        bail!("Staged modules must have a named address")
+                    };
+                    if named_addr != &package_name {
+                        bail!(
+                            "Staged modules must have the same named address, \
+                            {package_name} != {named_addr}"
+                        );
+                    }
+                }
+                let dependencies =
+                    self.get_dependency_ids(dependencies, /* include_std */ true)?;
+                let module_bytes = modules
+                    .iter()
+                    .map(|m| {
+                        let mut buf = vec![];
+                        m.module
+                            .serialize_with_version(m.module.version, &mut buf)
+                            .unwrap();
+                        buf
+                    })
+                    .collect::<Vec<_>>();
+                let digest = MovePackage::compute_digest_for_modules_and_deps(
+                    module_bytes.iter(),
+                    &dependencies,
+                    /* hash_modules */ true,
+                )
+                .to_vec();
+                let staged = StagedPackage {
+                    file: data,
+                    syntax,
+                    modules,
+                    digest,
+                };
+                let prev = self.staged_modules.insert(package_name, staged);
+                if prev.is_some() {
+                    panic!("Package '{package_name}' already staged")
+                }
+                Ok(merge_output(warnings_opt, output))
+            }
+            HaneulSubcommand::SetAddress(SetAddressCommand { address, input }) => {
+                let address_sym = &Symbol::from(address.as_str());
+                let state = self.compiled_state();
+                let input = input.into_concrete_value(&|s| Some(state.resolve_named_address(s)))?;
+                let (value, package) = match input {
+                    HaneulValue::Object(fake_id, version) => {
+                        let id = match self.fake_to_real_object_id(fake_id) {
+                            Some(id) => id,
+                            None => bail!("INVALID TEST. Unknown object, object({})", fake_id),
+                        };
+                        let obj = self.get_object(&id, version)?;
+                        let package = obj.data.try_as_package().map(|package| {
+                            package
+                                .serialized_module_map()
+                                .values()
+                                .map(|published_module_bytes| {
+                                    let module = CompiledModule::deserialize_with_defaults(
+                                        published_module_bytes,
+                                    )
+                                    .unwrap();
+                                    MaybeNamedCompiledModule {
+                                        named_address: Some(*address_sym),
+                                        module,
+                                        source_map: None,
+                                    }
+                                })
+                                .collect()
+                        });
+                        let value: AccountAddress = id.into();
+                        (value, package)
+                    }
+                    HaneulValue::MoveValue(v) => {
+                        let bytes = v.simple_serialize().unwrap();
+                        let value: AccountAddress = bcs::from_bytes(&bytes)?;
+                        (value, None)
+                    }
+                    HaneulValue::Digest(_) => bail!("digest is not supported as an input"),
+                    HaneulValue::ObjVec(_) => bail!("obj vec is not supported as an input"),
+                    HaneulValue::Receiving(_, _) => bail!("receiving is not supported as an input"),
+                    HaneulValue::Owned(_, _) => bail!("owned object is not supported as an input"),
+                    HaneulValue::Shared(_, _, _) => {
+                        bail!("shared object is not supported as an input")
+                    }
+                    HaneulValue::Withdraw(_, _) => {
+                        bail!("withdraw reservation is not supported as an input for set-address")
+                    }
+                };
+                let value = NumericalAddress::new(value.into_bytes(), NumberFormat::Hex);
+                self.compiled_state
+                    .named_address_mapping
+                    .insert(address, value);
+
+                let res = package.and_then(|p| Some((p, self.staged_modules.remove(address_sym)?)));
+                if let Some((package, staged)) = res {
+                    let StagedPackage {
+                        file,
+                        syntax,
+                        modules: _,
+                        digest: _,
+                    } = staged;
+                    store_modules(self, syntax, file, package)
+                }
+
+                Ok(None)
+            }
+            HaneulSubcommand::Bench(
+                RunCommand {
+                    signers,
+                    args,
+                    type_args,
+                    gas_budget,
+                    syntax,
+                    name,
+                },
+                extra_args,
+            ) => {
+                let (raw_addr, module_name, name) = name.unwrap();
+
+                assert!(
+                    syntax.is_none(),
+                    "syntax flag meaningless with function execution"
+                );
+
+                let addr = self.compiled_state().resolve_address(&raw_addr);
+                let module_id = ModuleId::new(addr, module_name);
+                let type_args = self.compiled_state().resolve_type_args(type_args)?;
+                let args = self.compiled_state().resolve_args(args)?;
+
+                let tx = self
+                    .build_function_call_tx(
+                        &module_id,
+                        name.as_ident_str(),
+                        type_args.clone(),
+                        signers.clone(),
+                        args.clone(),
+                        gas_budget,
+                        extra_args.clone(),
+                    )
+                    .unwrap();
+
+                // Note: benchmark does not support shared object version assignment
+                let assigned_versions = AssignedVersions::default();
+                let objects = self
+                    .executor
+                    .read_input_objects(tx.clone(), assigned_versions)
+                    .await?;
+
+                // only run benchmarks in release mode
+                if !cfg!(debug_assertions) {
+                    let mut c = Criterion::default();
+
+                    c.bench_function("benchmark_tx", |b| {
+                        let tx = tx.clone();
+                        let objects = objects.clone();
+                        b.iter(|| {
+                            self.executor
+                                .prepare_txn(tx.clone(), objects.clone())
+                                .unwrap();
+                        })
+                    });
+                }
+
+                // Run the tx for real after the benchmark, so that its effects are persisted and
+                // available to subsequent commands
+                self.call_function(
+                    &module_id,
+                    name.as_ident_str(),
+                    type_args,
+                    signers,
+                    args,
+                    gas_budget,
+                    extra_args,
+                )
+                .await?;
+                Ok(merge_output(None, None))
+            }
+        }
+    }
+
+    /// Process the error string such that it's less dependent on specific addresses or object IDs. Instead, they are
+    /// replaced by the account names or fake IDs as much as possible. This reduces the effort of updating tests
+    /// when something changed.
+    async fn process_error(&self, error: anyhow::Error) -> anyhow::Error {
+        let mut err = error.to_string();
+        for (name, account) in &self.accounts {
+            let addr = account.address.to_string();
+            let replace = format!("@{}", name);
+            err = err.replace(&addr, &replace);
+            // Also match without 0x since different error messages may use different format.
+            err = err.replace(&addr[2..], &replace);
+        }
+        for (id, fake_id) in &self.object_enumeration {
+            let id = id.to_string();
+            let replace = format!("object({})", fake_id);
+            err = err.replace(&id, &replace);
+            // Also match without 0x since different error messages may use different format.
+            err = err.replace(&id[2..], &replace);
+        }
+        anyhow!(err)
+    }
+}
+
+fn merge_output(left: Option<String>, right: Option<String>) -> Option<String> {
+    match (left, right) {
+        (None, right) => right,
+        (left, None) => left,
+        (Some(mut left), Some(right)) => {
+            left.push_str(&right);
+            Some(left)
+        }
+    }
+}
+
+impl HaneulTestAdapter {
+    pub fn with_offchain_reader(&mut self, offchain_reader: Box<dyn OffchainStateReader>) {
+        self.offchain_reader = Some(offchain_reader);
+    }
+
+    pub fn is_simulator(&self) -> bool {
+        self.is_simulator
+    }
+
+    pub fn executor(&self) -> &dyn TransactionalAdapter {
+        &*self.executor
+    }
+
+    pub fn into_executor(self) -> Box<dyn TransactionalAdapter> {
+        self.executor
+    }
+
+    fn named_variables(&self) -> BTreeMap<String, String> {
+        let mut variables = BTreeMap::new();
+
+        let named_addrs = self
+            .compiled_state
+            .named_address_mapping
+            .iter()
+            .map(|(name, addr)| (name.clone(), format!("{:#02x}", addr)));
+
+        for (name, addr) in named_addrs {
+            let addr = addr.to_string();
+
+            // Required variant
+            variables.insert(name.to_owned(), addr.clone());
+            // Optional variant
+            let name = name.to_string() + "_opt";
+            variables.insert(name.clone(), addr.clone());
+        }
+
+        for (oid, fid) in &self.object_enumeration {
+            if let FakeID::Enumerated(x, y) = fid {
+                variables.insert(format!("obj_{x}_{y}"), oid.to_string());
+                variables.insert(format!("obj_{x}_{y}_opt"), oid.to_string());
+            }
+        }
+
+        for (tid, digest) in &self.digest_enumeration {
+            variables.insert(format!("digest_{tid}"), digest.to_string());
+        }
+
+        variables
+    }
+
+    fn interpolate_contents(
+        &self,
+        contents: &str,
+        variables: &BTreeMap<String, String>,
+    ) -> anyhow::Result<String> {
+        let mut interpolated_contents = contents.to_string();
+
+        let re = regex::Regex::new(r"@\{([^\}]+)\}").unwrap();
+
+        let unique_vars: HashSet<_> = re
+            .captures_iter(contents)
+            .filter_map(|c| c.get(1).map(|m| m.as_str().to_string()))
+            .collect();
+
+        for var_name in unique_vars {
+            let Some(value) = variables.get(&var_name) else {
+                bail!("Unknown variable: {var_name}\nAllowed variable mappings are {variables:#?}");
+            };
+
+            let pattern = format!("@{{{}}}", var_name);
+            interpolated_contents = interpolated_contents.replace(&pattern, value);
+        }
+
+        Ok(interpolated_contents)
+    }
+
+    fn interpolate_query(
+        &self,
+        contents: &str,
+        cursors: &[String],
+        highest_checkpoint: u64,
+    ) -> anyhow::Result<String> {
+        // First collect all the variable mappings
+        let mut variables = self.named_variables();
+        variables.insert(
+            "highest_checkpoint".to_string(),
+            highest_checkpoint.to_string(),
+        );
+
+        // Then interpolate the cursors which may reference objects
+        for (idx, s) in cursors.iter().enumerate() {
+            // Try and parse the encoded cursor, if it fails, assume the cursor is a plain
+            // JSON cursor.
+            let c = self.interpolate_contents(s, &variables)?;
+            let encoded = Base64::encode(cursor::parse(&c).unwrap_or_else(|_| c.into_bytes()));
+
+            // Add the encoded cursor to the variables map because they may get used in the query.
+            variables.insert(format!("cursor_{idx}"), encoded);
+        }
+        self.interpolate_contents(contents, &variables)
+    }
+
+    async fn upgrade_package(
+        &mut self,
+        before_upgrade: NumericalAddress,
+        modules: &[MaybeNamedCompiledModule],
+        upgrade_capability: FakeID,
+        dependencies: Vec<String>,
+        sender: String,
+        gas_budget: u64,
+        dry_run: bool,
+        policy: u8,
+        gas_price: u64,
+        use_address_balance_gas: bool,
+    ) -> anyhow::Result<Option<String>> {
+        let modules_bytes = modules
+            .iter()
+            .map(|m| {
+                let mut module_bytes = vec![];
+                m.module
+                    .serialize_with_version(m.module.version, &mut module_bytes)?;
+                Ok(module_bytes)
+            })
+            .collect::<anyhow::Result<Vec<Vec<u8>>>>()?;
+
+        let dependencies = self.get_dependency_ids(dependencies, /* include_std */ true)?;
+
+        let mut builder = ProgrammableTransactionBuilder::new();
+
+        // Argument::Input(0)
+        HaneulValue::Object(upgrade_capability, None).into_argument(&mut builder, self)?;
+        let upgrade_arg = builder.pure(policy).unwrap();
+        let digest: Vec<u8> = MovePackage::compute_digest_for_modules_and_deps(
+            &modules_bytes,
+            &dependencies,
+            /* hash_modules */ true,
+        )
+        .into();
+        let digest_arg = builder.pure(digest).unwrap();
+
+        let upgrade_ticket = builder.programmable_move_call(
+            HANEUL_FRAMEWORK_PACKAGE_ID,
+            ident_str!("package").to_owned(),
+            ident_str!("authorize_upgrade").to_owned(),
+            vec![],
+            vec![Argument::Input(0), upgrade_arg, digest_arg],
+        );
+
+        let package_id = before_upgrade.into_inner().into();
+        let upgrade_receipt =
+            builder.upgrade(package_id, upgrade_ticket, dependencies, modules_bytes);
+
+        builder.programmable_move_call(
+            HANEUL_FRAMEWORK_PACKAGE_ID,
+            ident_str!("package").to_owned(),
+            ident_str!("commit_upgrade").to_owned(),
+            vec![],
+            vec![Argument::Input(0), upgrade_receipt],
+        );
+
+        let pt = builder.finish();
+
+        if dry_run {
+            let transaction = TransactionData::new_programmable(
+                self.get_sender(Some(sender)).address,
+                vec![],
+                pt,
+                gas_budget,
+                gas_price,
+            );
+            let summary = self.dry_run(transaction).await?;
+            return Ok(self.object_summary_output(&summary, false));
+        }
+
+        let data = |sender, gas: Vec<ObjectRef>| {
+            let gas = if use_address_balance_gas { vec![] } else { gas };
+            TransactionData::new_programmable(sender, gas, pt, gas_budget, gas_price)
+        };
+        let transaction = self.sign_txn(Some(sender), data);
+        let summary = self.execute_txn(transaction).await?;
+
+        let created_package = summary
+            .created
+            .iter()
+            .find_map(|id| {
+                let object = self.get_object(id, None).unwrap();
+                let package = object.data.try_as_package()?;
+                Some(package.id())
+            })
+            .unwrap();
+        let package_addr = NumericalAddress::new(created_package.into_bytes(), NumberFormat::Hex);
+        if let Some(new_package_name) = modules[0].named_address {
+            let prev_package = self
+                .compiled_state
+                .named_address_mapping
+                .insert(new_package_name.to_string(), package_addr);
+            match prev_package.map(|a| a.into_inner()) {
+                Some(addr) if addr != AccountAddress::ZERO => panic!(
+                    "Cannot reuse named address '{}' for multiple packages. \
+                It should be set to 0 initially",
+                    new_package_name
+                ),
+                _ => (),
+            }
+        }
+        let output = self.object_summary_output(&summary, /* summarize */ false);
+        Ok(output)
+    }
+
+    fn sign_txn(
+        &self,
+        sender: Option<String>,
+        txn_data: impl FnOnce(
+            /* sender */ HaneulAddress,
+            /* gas */ Vec<ObjectRef>,
+        ) -> TransactionData,
+    ) -> Transaction {
+        self.sign_sponsor_txn(sender, None, vec![], move |sender, _, gas| {
+            txn_data(sender, gas)
+        })
+    }
+
+    fn get_payments(&self, sponsor: &TestAccount, payments: Vec<FakeID>) -> Vec<ObjectRef> {
+        let payments = if payments.is_empty() {
+            vec![sponsor.gas]
+        } else {
+            payments
+                .into_iter()
+                .map(|payment| {
+                    self.fake_to_real_object_id(payment)
+                        .expect("Could not find specified payment object")
+                })
+                .collect::<Vec<ObjectID>>()
+        };
+
+        payments
+            .into_iter()
+            .map(|payment| {
+                self.get_object(&payment, None)
+                    .unwrap()
+                    .compute_object_reference()
+            })
+            .collect()
+    }
+
+    fn sign_sponsor_txn(
+        &self,
+        sender: Option<String>,
+        sponsor: Option<String>,
+        payment: Vec<FakeID>,
+        txn_data: impl FnOnce(
+            /* sender */ HaneulAddress,
+            /* sponsor */ HaneulAddress,
+            /* gas */ Vec<ObjectRef>,
+        ) -> TransactionData,
+    ) -> Transaction {
+        let sender = self.get_sender(sender);
+        let sponsor = sponsor.map_or(sender, |a| self.get_sender(Some(a)));
+
+        let payment_refs = self.get_payments(sponsor, payment);
+
+        let data = txn_data(sender.address, sponsor.address, payment_refs);
+
+        if sender.address == sponsor.address {
+            to_sender_signed_transaction(data, &sender.key_pair)
+        } else {
+            to_sender_signed_transaction_with_multi_signers(
+                data,
+                vec![&sender.key_pair, &sponsor.key_pair],
+            )
+        }
+    }
+
+    fn get_sender(&self, sender: Option<String>) -> &TestAccount {
+        match sender {
+            Some(n) => match self.accounts.get(&n) {
+                Some(test_account) => test_account,
+                None => panic!("Unbound account {}", n),
+            },
+            None => &self.default_account,
+        }
+    }
+
+    fn build_function_call_tx(
+        &mut self,
+        module_id: &ModuleId,
+        function: &IdentStr,
+        type_args: Vec<TypeTag>,
+        signers: Vec<ParsedAddress>,
+        args: Vec<HaneulValue>,
+        gas_budget: Option<u64>,
+        extra: HaneulRunArgs,
+    ) -> anyhow::Result<Transaction> {
+        assert!(signers.is_empty(), "signers are not used");
+        let HaneulRunArgs {
+            sender, gas_price, ..
+        } = extra;
+        let mut builder = ProgrammableTransactionBuilder::new();
+        let arguments = args
+            .into_iter()
+            .map(|arg| arg.into_argument(&mut builder, self))
+            .collect::<anyhow::Result<_>>()?;
+        let package_id = ObjectID::from(*module_id.address());
+
+        let gas_budget = gas_budget.unwrap_or(DEFAULT_GAS_BUDGET);
+        let gas_price = gas_price.unwrap_or(self.gas_price);
+        let data = |sender, gas| {
+            builder.command(Command::move_call(
+                package_id,
+                module_id.name().to_owned(),
+                function.to_owned(),
+                type_args,
+                arguments,
+            ));
+            let pt = builder.finish();
+            TransactionData::new_programmable(sender, gas, pt, gas_budget, gas_price)
+        };
+        Ok(self.sign_txn(sender, data))
+    }
+
+    async fn execute_txn(&mut self, transaction: Transaction) -> anyhow::Result<TxnSummary> {
+        let is_consensus_tx = transaction.is_consensus_tx();
+        let (effects, error_opt) = self.executor.execute_txn(transaction).await?;
+        let digest = effects.transaction_digest();
+
+        // Try to assign `digest_$task` to this transaction's digest -- panic if a transaction has
+        // already been set. Currently each task executes at most one transaction, and everything
+        // is fine. This panic triggering will be an early warning that we need to do something
+        // more sophisticated.
+        let task = self.next_fake.0;
+        if let Some(prev) = self.digest_enumeration.insert(task, *digest) {
+            panic!(
+                "Task {task} executed two transactions (expected at most one): {prev}, {digest}"
+            );
+        }
+
+        let mut created_ids: Vec<_> = effects
+            .created()
+            .iter()
+            .map(|((id, _, _), _)| *id)
+            .collect();
+        let mut mutated_ids: Vec<_> = effects
+            .mutated()
+            .iter()
+            .map(|((id, _, _), _)| *id)
+            .collect();
+        let mut unwrapped_ids: Vec<_> = effects
+            .unwrapped()
+            .iter()
+            .map(|((id, _, _), _)| *id)
+            .collect();
+        let mut deleted_ids: Vec<_> = effects.deleted().iter().map(|(id, _, _)| *id).collect();
+        let mut unwrapped_then_deleted_ids: Vec<_> = effects
+            .unwrapped_then_deleted()
+            .iter()
+            .map(|(id, _, _)| *id)
+            .collect();
+        let mut wrapped_ids: Vec<_> = effects.wrapped().iter().map(|(id, _, _)| *id).collect();
+
+        let accumulator_events = effects.accumulator_events();
+        let mut accumulators_written: Vec<_> = accumulator_events
+            .iter()
+            .map(|event| {
+                (
+                    *event.accumulator_obj.inner(),
+                    event.write.address.address,
+                    event.write.address.ty.clone(),
+                    event.write.operation.clone(),
+                )
+            })
+            .collect();
+
+        let gas_summary = effects.gas_cost_summary();
+
+        // make sure objects that have previously not been in storage get assigned a fake id.
+        let mut might_need_fake_id: Vec<_> = created_ids
+            .iter()
+            .chain(unwrapped_ids.iter())
+            .copied()
+            .collect();
+
+        // Use a stable sort before assigning fake ids, so test output remains stable.
+        might_need_fake_id.sort_by_key(|id| self.get_object_sorting_key(id));
+
+        accumulators_written.sort_by_key(|(_, address, ty, _)| {
+            (
+                self.stabilize_str(format!("{}", address)),
+                self.stabilize_str(format!("{}", ty)),
+            )
+        });
+
+        might_need_fake_id.extend(accumulators_written.iter().map(|(id, _, _, _)| *id));
+
+        for id in might_need_fake_id {
+            self.enumerate_fake(id);
+        }
+
+        let mut unchanged_shared_ids = effects
+            .unchanged_consensus_objects()
+            .iter()
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>();
+
+        // Treat unwrapped objects as writes (even though sometimes this is the first time we can
+        // refer to them at their id in storage).
+
+        // sort by fake id
+        created_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
+        mutated_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
+        unwrapped_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
+        deleted_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
+        unwrapped_then_deleted_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
+        wrapped_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
+        unchanged_shared_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
+        accumulators_written.sort_by_key(|(id, _, _, _)| self.real_to_fake_object_id(id));
+
+        match effects.status() {
+            ExecutionStatus::Success => {
+                let events = self
+                    .executor
+                    .query_tx_events_asc(digest, *QUERY_MAX_RESULT_LIMIT)
+                    .await?;
+                Ok(TxnSummary {
+                    events,
+                    accumulators_written,
+                    gas_summary: gas_summary.clone(),
+                    created: created_ids,
+                    mutated: mutated_ids,
+                    unwrapped: unwrapped_ids,
+                    deleted: deleted_ids,
+                    unwrapped_then_deleted: unwrapped_then_deleted_ids,
+                    wrapped: wrapped_ids,
+                    unchanged_shared: unchanged_shared_ids,
+                })
+            }
+            ExecutionStatus::Failure { error, command } => {
+                let execution_msg = if is_consensus_tx {
+                    format!("Debug of error: {error:?} at command {command:?}")
+                } else {
+                    format!("Execution Error: {}", error_opt.unwrap())
+                };
+                let error = match error {
+                    ExecutionFailureStatus::MoveAbort(loc, code)
+                        if ErrorBitset::from_u64(*code).is_some() =>
+                    {
+                        let clever_code = ErrorBitset::from_u64(*code).unwrap();
+                        let line_number = format!("at line {}", clever_code.line_number().unwrap());
+                        let code = match clever_code.error_code() {
+                            Some(code) => format!("{line_number} with clever code {}", code),
+                            None => line_number,
+                        };
+                        format!("Move Abort in {loc} {code}")
+                    }
+                    _ => format!("{error}"),
+                };
+                Err(anyhow::anyhow!(self.stabilize_str(format!(
+                    "Transaction Effects Status: {error}\n{execution_msg}",
+                ))))
+            }
+        }
+    }
+
+    async fn dry_run(&mut self, transaction: TransactionData) -> anyhow::Result<TxnSummary> {
+        let digest = transaction.digest();
+        let results = self
+            .executor
+            .dry_run_transaction_block(transaction, digest)
+            .await?;
+        let DryRunTransactionBlockResponse {
+            effects, events, ..
+        } = results;
+
+        self.tx_summary_from_effects(effects, events)
+    }
+
+    async fn dev_inspect(
+        &mut self,
+        sender: HaneulAddress,
+        transaction_kind: TransactionKind,
+        gas_price: Option<u64>,
+    ) -> anyhow::Result<TxnSummary> {
+        let results = self
+            .executor
+            .dev_inspect_transaction_block(sender, transaction_kind, gas_price)
+            .await?;
+        let DevInspectResults {
+            effects, events, ..
+        } = results;
+
+        self.tx_summary_from_effects(effects, events)
+    }
+
+    fn tx_summary_from_effects(
+        &mut self,
+        effects: HaneulTransactionBlockEffects,
+        events: HaneulTransactionBlockEvents,
+    ) -> anyhow::Result<TxnSummary> {
+        if let HaneulExecutionStatus::Failure { error } = effects.status() {
+            return Err(anyhow::anyhow!(self.stabilize_str(format!(
+                "Transaction Effects Status: {error}\nExecution Error: {error}",
+            ))));
+        }
+
+        let mut created_ids: Vec<_> = effects.created().iter().map(|o| o.object_id()).collect();
+        let mut mutated_ids: Vec<_> = effects.mutated().iter().map(|o| o.object_id()).collect();
+        let mut unwrapped_ids: Vec<_> = effects.unwrapped().iter().map(|o| o.object_id()).collect();
+        let mut deleted_ids: Vec<_> = effects.deleted().iter().map(|o| o.object_id).collect();
+        let mut unwrapped_then_deleted_ids: Vec<_> = effects
+            .unwrapped_then_deleted()
+            .iter()
+            .map(|o| o.object_id)
+            .collect();
+        let mut wrapped_ids: Vec<_> = effects.wrapped().iter().map(|o| o.object_id).collect();
+        let accumulator_events = effects.accumulator_events();
+        let mut accumulators_written: Vec<_> = accumulator_events
+            .iter()
+            .map(|event| {
+                let operation = match event.operation {
+                    HaneulAccumulatorOperation::Merge => AccumulatorOperation::Merge,
+                    HaneulAccumulatorOperation::Split => AccumulatorOperation::Split,
+                };
+                (
+                    event.accumulator_obj,
+                    event.address,
+                    event
+                        .ty
+                        .clone()
+                        .try_into()
+                        .expect("Failed to parse accumulator type tag"),
+                    operation,
+                )
+            })
+            .collect();
+
+        let gas_summary = effects.gas_cost_summary();
+
+        // make sure objects that have previously not been in storage get assigned a fake id.
+        let mut might_need_fake_id: Vec<_> = created_ids
+            .iter()
+            .chain(unwrapped_ids.iter())
+            .copied()
+            .collect();
+
+        // Use a stable sort before assigning fake ids, so test output remains stable.
+        might_need_fake_id.sort_by_key(|id| self.get_object_sorting_key(id));
+        accumulators_written.sort_by_key(|(_, address, ty, _)| {
+            (
+                self.stabilize_str(format!("{}", address)),
+                self.stabilize_str(format!("{}", ty)),
+            )
+        });
+
+        might_need_fake_id.extend(accumulators_written.iter().map(|(obj_id, _, _, _)| *obj_id));
+
+        for id in might_need_fake_id {
+            self.enumerate_fake(id);
+        }
+
+        // Treat unwrapped objects as writes (even though sometimes this is the first time we can
+        // refer to them at their id in storage).
+
+        // sort by fake id
+        created_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
+        mutated_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
+        unwrapped_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
+        deleted_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
+        unwrapped_then_deleted_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
+        wrapped_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
+        accumulators_written.sort_by_key(|(id, _, _, _)| self.real_to_fake_object_id(id));
+
+        let events = events
+            .data
+            .into_iter()
+            .map(|haneul_event| haneul_event.into())
+            .collect();
+
+        Ok(TxnSummary {
+            events,
+            gas_summary: gas_summary.clone(),
+            created: created_ids,
+            mutated: mutated_ids,
+            unwrapped: unwrapped_ids,
+            deleted: deleted_ids,
+            unwrapped_then_deleted: unwrapped_then_deleted_ids,
+            wrapped: wrapped_ids,
+            // TODO: Properly propagate unchanged shared objects in dev_inspect.
+            unchanged_shared: vec![],
+            accumulators_written,
+        })
+    }
+
+    fn get_object(&self, id: &ObjectID, version: Option<SequenceNumber>) -> anyhow::Result<Object> {
+        let obj_res = if let Some(v) = version {
+            ObjectStore::get_object_by_key(&*self.executor, id, v)
+        } else {
+            ObjectStore::get_object(&*self.executor, id)
+        };
+        match obj_res {
+            Some(obj) => Ok(obj),
+            None => Err(anyhow!("INVALID TEST! Unable to find object {id}")),
+        }
+    }
+
+    // stable way of sorting objects by type. Does not however, produce a stable sorting
+    // between objects of the same type
+    fn get_object_sorting_key(&self, id: &ObjectID) -> String {
+        match &self.get_object(id, None).unwrap().data {
+            object::Data::Move(obj) => self.stabilize_str(format!("{}", obj.type_())),
+            object::Data::Package(pkg) => pkg
+                .serialized_module_map()
+                .keys()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(","),
+        }
+    }
+
+    pub(crate) fn fake_to_real_object_id(&self, fake_id: FakeID) -> Option<ObjectID> {
+        self.object_enumeration.get_by_right(&fake_id).copied()
+    }
+
+    pub(crate) fn real_to_fake_object_id(&self, id: &ObjectID) -> Option<FakeID> {
+        self.object_enumeration.get_by_left(id).copied()
+    }
+
+    fn enumerate_fake(&mut self, id: ObjectID) -> FakeID {
+        if let Some(fake) = self.object_enumeration.get_by_left(&id) {
+            return *fake;
+        }
+        let (task, i) = self.next_fake;
+        let fake_id = FakeID::Enumerated(task, i);
+        self.object_enumeration.insert(id, fake_id);
+
+        self.next_fake = (task, i + 1);
+        fake_id
+    }
+
+    fn object_summary_output(
+        &self,
+        TxnSummary {
+            events,
+            gas_summary,
+            created,
+            mutated,
+            unwrapped,
+            deleted,
+            unwrapped_then_deleted,
+            wrapped,
+            unchanged_shared,
+            accumulators_written,
+        }: &TxnSummary,
+        summarize: bool,
+    ) -> Option<String> {
+        let mut out = String::new();
+        if !events.is_empty() {
+            write!(out, "events: {}", self.list_events(events, summarize)).unwrap();
+        }
+        if !created.is_empty() {
+            if !out.is_empty() {
+                out.push('\n')
+            }
+            write!(out, "created: {}", self.list_objs(created, summarize)).unwrap();
+        }
+        if !mutated.is_empty() {
+            if !out.is_empty() {
+                out.push('\n')
+            }
+            write!(out, "mutated: {}", self.list_objs(mutated, summarize)).unwrap();
+        }
+        if !unwrapped.is_empty() {
+            if !out.is_empty() {
+                out.push('\n')
+            }
+            write!(out, "unwrapped: {}", self.list_objs(unwrapped, summarize)).unwrap();
+        }
+        if !deleted.is_empty() {
+            if !out.is_empty() {
+                out.push('\n')
+            }
+            write!(out, "deleted: {}", self.list_objs(deleted, summarize)).unwrap();
+        }
+        if !unwrapped_then_deleted.is_empty() {
+            if !out.is_empty() {
+                out.push('\n')
+            }
+            write!(
+                out,
+                "unwrapped_then_deleted: {}",
+                self.list_objs(unwrapped_then_deleted, summarize)
+            )
+            .unwrap();
+        }
+        if !wrapped.is_empty() {
+            if !out.is_empty() {
+                out.push('\n')
+            }
+            write!(out, "wrapped: {}", self.list_objs(wrapped, summarize)).unwrap();
+        }
+        if !unchanged_shared.is_empty() {
+            if !out.is_empty() {
+                out.push('\n')
+            }
+            write!(
+                out,
+                "unchanged_shared: {}",
+                self.list_objs(unchanged_shared, summarize)
+            )
+            .unwrap();
+        }
+        if !accumulators_written.is_empty() {
+            if !out.is_empty() {
+                out.push('\n')
+            }
+            write!(
+                out,
+                "accumulators_written: {}",
+                self.list_accumulator_events(accumulators_written, summarize)
+            )
+            .unwrap();
+        }
+        out.push('\n');
+        write!(out, "gas summary: {}", gas_summary).unwrap();
+
+        if out.is_empty() { None } else { Some(out) }
+    }
+
+    fn list_events(&self, events: &[Event], summarize: bool) -> String {
+        if summarize {
+            return format!("{}", events.len());
+        }
+        events
+            .iter()
+            .map(|event| self.stabilize_str(format!("{:?}", event)))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    fn format_fake_id(&self, obj_id: &ObjectID) -> String {
+        match self.real_to_fake_object_id(obj_id) {
+            None => "object(_)".to_string(),
+            Some(FakeID::Known(id)) => {
+                let id: AccountAddress = id.into();
+                format!("0x{id:x}")
+            }
+            Some(fake) => format!("object({})", fake),
+        }
+    }
+
+    fn list_objs(&self, objs: &[ObjectID], summarize: bool) -> String {
+        if summarize {
+            return format!("{}", objs.len());
+        }
+        objs.iter()
+            .map(|id| self.format_fake_id(id))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    fn list_accumulator_events(
+        &self,
+        accumulators: &[(ObjectID, HaneulAddress, TypeTag, AccumulatorOperation)],
+        summarize: bool,
+    ) -> String {
+        if summarize {
+            return format!("{}", accumulators.len());
+        }
+        accumulators
+            .iter()
+            .map(|(obj_id, address, ty, operation)| {
+                let fake_id_str = self.format_fake_id(obj_id);
+                let address_str = self.stabilize_str(format!("{}", address));
+                let ty_str = self.stabilize_str(format!("{}", ty));
+                let op_str = match operation {
+                    AccumulatorOperation::Merge => "Merge",
+                    AccumulatorOperation::Split => "Split",
+                };
+                format!("({}, {}, {}, {})", fake_id_str, address_str, ty_str, op_str)
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    fn stabilize_str(&self, input: impl AsRef<str>) -> String {
+        fn candidate_is_hex(s: &str) -> bool {
+            const HEX_STR_LENGTH: usize = HANEUL_ADDRESS_LENGTH * 2;
+            let n = s.len();
+            (s.starts_with("0x") && n >= 3) || n == HEX_STR_LENGTH
+        }
+        let mut hex_candidate = String::new();
+        let mut result = String::new();
+        let mut chars = input.as_ref().chars().peekable();
+        let mut cur = chars.next();
+        while let Some(c) = cur {
+            match c {
+                '0' if hex_candidate.is_empty() && matches!(chars.peek(), Some('x')) => {
+                    let c = chars.next().unwrap();
+                    assert!(c == 'x');
+                    hex_candidate.push_str("0x");
+                }
+                '0'..='9' | 'a'..='f' | 'A'..='F' => hex_candidate.push(c),
+                _ => {
+                    if candidate_is_hex(&hex_candidate) {
+                        result.push_str(&self.remap_hex_str(hex_candidate));
+                        hex_candidate = String::new();
+                    } else {
+                        result.push_str(&hex_candidate);
+                        if !hex_candidate.is_empty() {
+                            hex_candidate = String::new();
+                        }
+                    }
+                    result.push(c);
+                }
+            }
+            cur = chars.next();
+        }
+        if candidate_is_hex(&hex_candidate) {
+            result.push_str(&self.remap_hex_str(hex_candidate));
+        } else {
+            result.push_str(&hex_candidate);
+        }
+        result
+    }
+
+    fn remap_hex_str(&self, hex_str: String) -> String {
+        let hex_str = if hex_str.starts_with("0x") {
+            hex_str
+        } else {
+            format!("0x{}", hex_str)
+        };
+        let parsed = AccountAddress::from_hex_literal(&hex_str).unwrap();
+        if let Some((known, _)) = self
+            .compiled_state
+            .named_address_mapping
+            .iter()
+            .find(|(_name, addr)| addr.into_inner() == parsed)
+        {
+            return known.clone();
+        }
+        match self.real_to_fake_object_id(&parsed.into()) {
+            None => "_".to_string(),
+            Some(FakeID::Known(id)) => {
+                let id: AccountAddress = id.into();
+                format!("0x{id:x}")
+            }
+            Some(fake) => format!("fake({})", fake),
+        }
+    }
+
+    fn next_task(&mut self) {
+        self.next_fake = (self.next_fake.0 + 1, 0)
+    }
+
+    fn get_dependency_ids(
+        &self,
+        dependencies: Vec<String>,
+        include_std: bool,
+    ) -> anyhow::Result<Vec<ObjectID>> {
+        let mut dependencies: Vec<_> = dependencies
+            .into_iter()
+            .map(|d| {
+                let Some(addr) = self.compiled_state.named_address_mapping.get(&d) else {
+                    bail!("There is no published module address corresponding to name address {d}");
+                };
+                let id: ObjectID = addr.into_inner().into();
+                Ok(id)
+            })
+            .collect::<Result<_, _>>()?;
+        // we are assuming that all packages depend on Move Stdlib and Haneul Framework, so these
+        // don't have to be provided explicitly as parameters
+        if include_std {
+            dependencies.extend([MOVE_STDLIB_PACKAGE_ID, HANEUL_FRAMEWORK_PACKAGE_ID]);
+        }
+        Ok(dependencies)
+    }
+}
+
+impl<'a> GetModule for &'a HaneulTestAdapter {
+    type Error = anyhow::Error;
+
+    type Item = Cow<'a, CompiledModule>;
+
+    fn get_module_by_id(&self, id: &ModuleId) -> anyhow::Result<Option<Self::Item>, Self::Error> {
+        if let Some(m) = self
+            .compiled_state
+            .dep_modules()
+            .find(|m| &m.self_id() == id)
+        {
+            Ok(Some(Cow::Borrowed(m)))
+        } else {
+            let module = self
+                .executor
+                .get_object(&ObjectID::from(*id.address()))
+                .and_then(|obj| {
+                    let data = obj.data.try_as_package()?.get_module(id)?;
+                    let module = CompiledModule::deserialize_with_defaults(data).unwrap();
+                    Some(module)
+                })
+                .unwrap_or_else(|| panic!("Internal error: Unbound module {}", id));
+            Ok(Some(Cow::Owned(module)))
+        }
+    }
+}
+
+impl fmt::Display for FakeID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FakeID::Known(id) => {
+                let addr: AccountAddress = (*id).into();
+                write!(f, "0x{:x}", addr)
+            }
+            FakeID::Enumerated(task, i) => write!(f, "{},{}", task, i),
+        }
+    }
+}
+
+impl Default for AdapterInitConfig {
+    fn default() -> Self {
+        Self {
+            additional_mapping: BTreeMap::new(),
+            account_names: BTreeSet::new(),
+            protocol_config: ProtocolConfig::get_for_max_version_UNSAFE(),
+            is_simulator: false,
+            num_custom_validator_accounts: 0,
+            reference_gas_price: None,
+            default_gas_price: None,
+            flavor: None,
+            offchain_config: None,
+        }
+    }
+}
+
+static NAMED_ADDRESSES: Lazy<BTreeMap<String, NumericalAddress>> = Lazy::new(|| {
+    let mut map = move_stdlib::named_addresses();
+    assert!(map.get("std").unwrap().into_inner() == MOVE_STDLIB_ADDRESS);
+    // TODO fix Haneul framework constants
+    map.insert(
+        "haneul".to_string(),
+        NumericalAddress::new(
+            HANEUL_FRAMEWORK_ADDRESS.into_bytes(),
+            move_compiler::shared::NumberFormat::Hex,
+        ),
+    );
+    map.insert(
+        "haneul_system".to_string(),
+        NumericalAddress::new(
+            HANEUL_SYSTEM_ADDRESS.into_bytes(),
+            move_compiler::shared::NumberFormat::Hex,
+        ),
+    );
+    map.insert(
+        "deepbook".to_string(),
+        NumericalAddress::new(
+            DEEPBOOK_ADDRESS.into_bytes(),
+            move_compiler::shared::NumberFormat::Hex,
+        ),
+    );
+    map.insert(
+        "bridge".to_string(),
+        NumericalAddress::new(
+            BRIDGE_ADDRESS.into_bytes(),
+            move_compiler::shared::NumberFormat::Hex,
+        ),
+    );
+    map
+});
+
+pub static PRE_COMPILED: Lazy<PreCompiledProgramInfo> = Lazy::new(|| {
+    // TODO invoke package system? Or otherwise pull the versions for these packages as per their
+    // actual Move.toml files. They way they are treated here is odd, too, though.
+    let haneul_files: &Path = Path::new(DEFAULT_FRAMEWORK_PATH);
+    let haneul_system_sources = {
+        let mut buf = haneul_files.to_path_buf();
+        buf.extend(["packages", "haneul-system", "sources"]);
+        buf.to_string_lossy().to_string()
+    };
+    let haneul_sources = {
+        let mut buf = haneul_files.to_path_buf();
+        buf.extend(["packages", "haneul-framework", "sources"]);
+        buf.to_string_lossy().to_string()
+    };
+    let haneul_deps = {
+        let mut buf = haneul_files.to_path_buf();
+        buf.extend(["packages", "move-stdlib", "sources"]);
+        buf.to_string_lossy().to_string()
+    };
+    let deepbook_sources = {
+        let mut buf = haneul_files.to_path_buf();
+        buf.extend(["packages", "deepbook", "sources"]);
+        buf.to_string_lossy().to_string()
+    };
+    let config = PackageConfig {
+        edition: Edition::E2024_BETA,
+        flavor: Flavor::Haneul,
+        ..Default::default()
+    };
+    let bridge_sources = {
+        let mut buf = haneul_files.to_path_buf();
+        buf.extend(["packages", "bridge", "sources"]);
+        buf.to_string_lossy().to_string()
+    };
+    let pre_compiled_program = move_compiler::construct_pre_compiled_lib(
+        vec![PackagePaths {
+            name: Some(("haneul-framework".into(), config)),
+            paths: vec![
+                haneul_system_sources,
+                haneul_sources,
+                haneul_deps,
+                deepbook_sources,
+                bridge_sources,
+            ],
+            named_address_map: NAMED_ADDRESSES.clone(),
+        }],
+        None,
+        None,
+        false,
+        Flags::empty(),
+        None,
+    )
+    .unwrap();
+    match pre_compiled_program {
+        Err((files, diags)) => {
+            eprintln!("!!!Haneul framework failed to compile!!!");
+            move_compiler::diagnostics::report_diagnostics(&files, diags)
+        }
+        Ok(res) => res,
+    }
+});
+
+async fn create_validator_fullnode(
+    protocol_config: &ProtocolConfig,
+    objects: &[Object],
+) -> (Arc<AuthorityState>, Arc<AuthorityState>) {
+    let builder = TestAuthorityBuilder::new()
+        .with_protocol_config(protocol_config.clone())
+        .with_starting_objects(objects);
+    let state = builder.clone().build().await;
+    let fullnode_key_pair = get_authority_key_pair().1;
+    let fullnode = builder.with_keypair(&fullnode_key_pair).build().await;
+    (state, fullnode)
+}
+
+async fn create_val_fullnode_executor(
+    protocol_config: &ProtocolConfig,
+    objects: &[Object],
+) -> ValidatorWithFullnode {
+    let (validator, fullnode) = create_validator_fullnode(protocol_config, objects).await;
+
+    let metrics = KeyValueStoreMetrics::new_for_tests();
+    let kv_store = Arc::new(TransactionKeyValueStore::new(
+        "rocksdb",
+        metrics,
+        validator.clone(),
+    ));
+    ValidatorWithFullnode {
+        validator,
+        fullnode,
+        kv_store,
+    }
+}
+
+struct AccountSetup {
+    pub default_account: TestAccount,
+    pub named_address_mapping: BTreeMap<String, NumericalAddress>,
+    pub objects: Vec<Object>,
+    pub account_objects: BTreeMap<String, ObjectID>,
+    pub accounts: BTreeMap<String, TestAccount>,
+}
+
+/// Create the executor for a validator with a fullnode
+/// The issue with this executor is we cannot control the checkpoint
+/// and epoch creation process
+async fn init_val_fullnode_executor(
+    mut rng: StdRng,
+    account_names: BTreeSet<String>,
+    additional_mapping: BTreeMap<String, NumericalAddress>,
+    protocol_config: &ProtocolConfig,
+) -> (
+    Box<dyn TransactionalAdapter>,
+    AccountSetup,
+    Option<Arc<dyn RpcStateReader + Send + Sync>>,
+) {
+    // Initial list of named addresses with specified values
+    let mut named_address_mapping = NAMED_ADDRESSES.clone();
+    let mut account_objects = BTreeMap::new();
+    let mut accounts = BTreeMap::new();
+    let mut objects = vec![];
+
+    // Closure to create accounts with gas objects of value `GAS_FOR_TESTING`
+    let mut mk_account = || {
+        let (address, key_pair) = get_key_pair_from_rng(&mut rng);
+        let obj = Object::with_id_owner_gas_for_testing(
+            ObjectID::new(rng.r#gen()),
+            address,
+            GAS_FOR_TESTING,
+        );
+        let test_account = TestAccount {
+            address,
+            key_pair,
+            gas: obj.id(),
+        };
+        objects.push(obj);
+        test_account
+    };
+
+    // For each named Haneul account without an address value, create an account with an address
+    // and a gas object
+    for n in account_names {
+        let test_account = mk_account();
+        account_objects.insert(n.clone(), test_account.gas);
+        accounts.insert(n, test_account);
+    }
+
+    // Make a default account with a gas object
+    let default_account = mk_account();
+
+    let executor = Box::new(create_val_fullnode_executor(protocol_config, &objects).await);
+
+    update_named_address_mapping(
+        &mut named_address_mapping,
+        &accounts,
+        additional_mapping,
+        &*executor,
+    )
+    .await;
+
+    let acc_setup = AccountSetup {
+        default_account,
+        named_address_mapping,
+        objects,
+        account_objects,
+        accounts,
+    };
+    (executor, acc_setup, None)
+}
+
+/// Create an executor using a simulator
+/// This means we can control the checkpoint, epoch creation process and
+/// manually advance clock as needed
+async fn init_sim_executor(
+    mut rng: StdRng,
+    account_names: BTreeSet<String>,
+    additional_mapping: BTreeMap<String, NumericalAddress>,
+    protocol_config: &ProtocolConfig,
+    num_custom_validator_accounts: u64,
+    reference_gas_price: Option<u64>,
+    data_ingestion_path: PathBuf,
+) -> (
+    Box<dyn TransactionalAdapter>,
+    AccountSetup,
+    Option<Arc<dyn RpcStateReader + Send + Sync>>,
+) {
+    // Initial list of named addresses with specified values
+    let mut named_address_mapping = NAMED_ADDRESSES.clone();
+    let mut account_objects = BTreeMap::new();
+    let mut account_kps = BTreeMap::new();
+    let mut accounts = BTreeMap::new();
+    let mut objects = vec![];
+
+    // For each named Haneul account without an address value, create a key pair
+    for n in account_names {
+        let test_account = get_key_pair_from_rng(&mut rng);
+        account_kps.insert(n, test_account);
+    }
+
+    // Make a default account keypair
+    let default_account_kp = get_key_pair_from_rng(&mut rng);
+
+    // Validators are sorted by their authority public key in tests. Sort before assigning
+    // names so that validators are ordered by name (validator_0, validator_1, ..).
+    // See https://github.com/GeunhwaJeong/haneul/blob/272c471e3ad1f91b2564efdaaa17100e475f732e/crates/haneul-swarm-config/src/network_config_builder.rs#L443
+    let addr_keys: Vec<_> = (0..num_custom_validator_accounts)
+        // Make a validator account with a gas object
+        .map(|_| {
+            let (addr, account_key_pair): (HaneulAddress, AccountKeyPair) =
+                get_key_pair_from_rng(&mut rng);
+            let protocol_key_pair: AuthorityKeyPair = get_key_pair_from_rng(&mut rng).1;
+            (
+                protocol_key_pair.public().into(),
+                (
+                    addr,
+                    KeyPairWrapper {
+                        account_key_pair,
+                        protocol_key_pair: Some(protocol_key_pair),
+                    },
+                ),
+            )
+        })
+        .collect::<BTreeMap<AuthorityPublicKeyBytes, _>>()
+        .into_values()
+        .collect();
+
+    let mut acc_cfgs = account_kps
+        .values()
+        .map(|acc| AccountConfig {
+            address: Some(acc.0),
+            gas_amounts: vec![GAS_FOR_TESTING],
+        })
+        .collect::<Vec<_>>();
+    acc_cfgs.push(AccountConfig {
+        address: Some(default_account_kp.0),
+        gas_amounts: vec![GAS_FOR_TESTING],
+    });
+
+    acc_cfgs.extend(addr_keys.iter().map(|(addr, _)| AccountConfig {
+        address: Some(*addr),
+        gas_amounts: vec![GAS_FOR_TESTING],
+    }));
+
+    // Create the simulator with the specific account configs, which also crates objects
+
+    let (mut sim, read_replica) =
+        PersistedStore::new_sim_replica_with_protocol_version_and_accounts(
+            rng,
+            DEFAULT_CHAIN_START_TIMESTAMP,
+            protocol_config,
+            acc_cfgs,
+            addr_keys
+                .iter()
+                .map(|(_, key_pair_wrapper)| key_pair_wrapper.clone())
+                .collect(),
+            reference_gas_price,
+            None,
+        );
+
+    sim.set_data_ingestion_path(data_ingestion_path.clone());
+
+    // Get the actual object values from the simulator
+    for (name, (addr, kp)) in account_kps {
+        let o = sim.store().owned_objects(addr).next().unwrap();
+        objects.push(o.clone());
+        account_objects.insert(name.clone(), o.id());
+
+        accounts.insert(
+            name.to_owned(),
+            TestAccount {
+                address: addr,
+                key_pair: kp,
+                gas: o.id(),
+            },
+        );
+    }
+    let o = sim
+        .store()
+        .owned_objects(default_account_kp.0)
+        .next()
+        .unwrap();
+    let default_account = TestAccount {
+        address: default_account_kp.0,
+        key_pair: default_account_kp.1,
+        gas: o.id(),
+    };
+    objects.push(o.clone());
+
+    for (i, (addr, key_pair_wrapper)) in addr_keys.into_iter().enumerate() {
+        let o = sim.store().owned_objects(addr).next().unwrap();
+        let validator_account = TestAccount {
+            address: addr,
+            key_pair: key_pair_wrapper.account_key_pair,
+            gas: o.id(),
+        };
+        objects.push(o.clone());
+        let name = format!("validator_{}", i);
+        account_objects.insert(name.clone(), o.id());
+        accounts.insert(name, validator_account);
+    }
+
+    let sim = Box::new(sim);
+    update_named_address_mapping(
+        &mut named_address_mapping,
+        &accounts,
+        additional_mapping,
+        &*sim,
+    )
+    .await;
+
+    (
+        sim,
+        AccountSetup {
+            default_account,
+            named_address_mapping,
+            objects,
+            account_objects,
+            accounts,
+        },
+        Some(Arc::new(read_replica)),
+    )
+}
+
+async fn update_named_address_mapping(
+    named_address_mapping: &mut BTreeMap<String, NumericalAddress>,
+    accounts: &BTreeMap<String, TestAccount>,
+    additional_mapping: BTreeMap<String, NumericalAddress>,
+    trans_adapter: &dyn TransactionalAdapter,
+) {
+    let active_val_addrs: BTreeMap<_, _> = trans_adapter
+        .get_active_validator_addresses()
+        .await
+        .expect("Failed to get validator addresses")
+        .into_iter()
+        .enumerate()
+        .map(|(idx, addr)| {
+            let validator_name = accounts
+                .iter()
+                .find(|(_, account)| account.address == addr)
+                .map_or_else(
+                    || format!("validator_{idx}"),
+                    |(validator_name, _)| validator_name.clone(),
+                );
+            (validator_name, addr)
+        })
+        .collect();
+
+    // For mappings where the address is specified, populate the named address mapping
+    let additional_mapping = additional_mapping
+        .into_iter()
+        .chain(accounts.iter().map(|(n, test_account)| {
+            let addr = NumericalAddress::new(test_account.address.to_inner(), NumberFormat::Hex);
+            (n.clone(), addr)
+        }))
+        .chain(active_val_addrs.iter().map(|(n, addr)| {
+            let addr = NumericalAddress::new(addr.to_inner(), NumberFormat::Hex);
+            (n.clone(), addr)
+        }));
+    // Extend the mappings of all named addresses with values
+    for (name, addr) in additional_mapping {
+        if (named_address_mapping.contains_key(&name)
+            && (named_address_mapping.get(&name) != Some(&addr)))
+            || name == "haneul"
+        {
+            panic!(
+                "Invalid init. The named address '{}' is reserved or duplicated",
+                name
+            )
+        }
+        named_address_mapping.insert(name, addr);
+    }
+}
+
+impl ObjectStore for HaneulTestAdapter {
+    fn get_object(&self, object_id: &ObjectID) -> Option<Object> {
+        ObjectStore::get_object(&*self.executor, object_id)
+    }
+
+    fn get_object_by_key(&self, object_id: &ObjectID, version: VersionNumber) -> Option<Object> {
+        ObjectStore::get_object_by_key(&*self.executor, object_id, version)
+    }
+}
+
+impl ReadStore for HaneulTestAdapter {
+    fn get_latest_epoch_id(&self) -> haneul_types::storage::error::Result<EpochId> {
+        self.executor.get_latest_epoch_id()
+    }
+
+    fn get_committee(
+        &self,
+        epoch: haneul_types::committee::EpochId,
+    ) -> Option<Arc<haneul_types::committee::Committee>> {
+        self.executor.get_committee(epoch)
+    }
+
+    fn get_latest_checkpoint(&self) -> haneul_types::storage::error::Result<VerifiedCheckpoint> {
+        ReadStore::get_latest_checkpoint(&self.executor)
+    }
+
+    fn get_highest_verified_checkpoint(
+        &self,
+    ) -> haneul_types::storage::error::Result<VerifiedCheckpoint> {
+        self.executor.get_highest_verified_checkpoint()
+    }
+
+    fn get_highest_synced_checkpoint(
+        &self,
+    ) -> haneul_types::storage::error::Result<VerifiedCheckpoint> {
+        self.executor.get_highest_synced_checkpoint()
+    }
+
+    fn get_lowest_available_checkpoint(
+        &self,
+    ) -> haneul_types::storage::error::Result<CheckpointSequenceNumber> {
+        self.executor.get_lowest_available_checkpoint()
+    }
+
+    fn get_checkpoint_by_digest(
+        &self,
+        digest: &haneul_types::messages_checkpoint::CheckpointDigest,
+    ) -> Option<VerifiedCheckpoint> {
+        self.executor.get_checkpoint_by_digest(digest)
+    }
+
+    fn get_checkpoint_by_sequence_number(
+        &self,
+        sequence_number: CheckpointSequenceNumber,
+    ) -> Option<VerifiedCheckpoint> {
+        self.executor
+            .get_checkpoint_by_sequence_number(sequence_number)
+    }
+
+    fn get_checkpoint_contents_by_digest(
+        &self,
+        digest: &CheckpointContentsDigest,
+    ) -> Option<CheckpointContents> {
+        self.executor.get_checkpoint_contents_by_digest(digest)
+    }
+
+    fn get_checkpoint_contents_by_sequence_number(
+        &self,
+        sequence_number: CheckpointSequenceNumber,
+    ) -> Option<CheckpointContents> {
+        self.executor
+            .get_checkpoint_contents_by_sequence_number(sequence_number)
+    }
+
+    fn get_transaction(&self, tx_digest: &TransactionDigest) -> Option<Arc<VerifiedTransaction>> {
+        self.executor.get_transaction(tx_digest)
+    }
+
+    fn get_transaction_effects(&self, tx_digest: &TransactionDigest) -> Option<TransactionEffects> {
+        self.executor.get_transaction_effects(tx_digest)
+    }
+
+    fn get_events(&self, digest: &TransactionDigest) -> Option<TransactionEvents> {
+        self.executor.get_events(digest)
+    }
+
+    fn get_full_checkpoint_contents(
+        &self,
+        sequence_number: Option<CheckpointSequenceNumber>,
+        digest: &CheckpointContentsDigest,
+    ) -> Option<haneul_types::messages_checkpoint::VersionedFullCheckpointContents> {
+        self.executor
+            .get_full_checkpoint_contents(sequence_number, digest)
+    }
+
+    fn get_unchanged_loaded_runtime_objects(
+        &self,
+        digest: &TransactionDigest,
+    ) -> Option<Vec<haneul_types::storage::ObjectKey>> {
+        self.executor.get_unchanged_loaded_runtime_objects(digest)
+    }
+
+    fn get_transaction_checkpoint(
+        &self,
+        digest: &TransactionDigest,
+    ) -> Option<CheckpointSequenceNumber> {
+        self.executor.get_transaction_checkpoint(digest)
+    }
+}
