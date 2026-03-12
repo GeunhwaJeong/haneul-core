@@ -1,0 +1,10 @@
+[package]
+name = "z"
+version = "0.0.1"
+implicit-dependencies = false
+
+[dependencies]
+Haneul = { local = "$REPO_ROOT/crates/haneul-framework/packages/haneul-framework" }
+
+[addresses]
+z = "$RUNTIME_ID"
