@@ -1,0 +1,9 @@
+[package]
+name = "vesting"
+edition = "2024.beta"
+
+[dependencies]
+Haneul = { local = "../../crates/haneul-framework/packages/haneul-framework"  }
+
+[addresses]
+vesting = "0x0"
