@@ -1,0 +1,551 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 17 tasks
+
+init:
+A: object(0,0)
+
+task 1, lines 6-10:
+//# programmable --sender A --inputs @A 42 43 44 45 46 47 48 49
+//> 0: SplitCoins(Gas, [Input(1), Input(2), Input(3), Input(4)]);
+//> 1: SplitCoins(Gas, [Input(5), Input(6), Input(7), Input(8)]);
+//> 2: TransferObjects([NestedResult(0,0), NestedResult(0,1), NestedResult(0,2), NestedResult(0,3)], Input(0));
+//> 3: TransferObjects([NestedResult(1,0), NestedResult(1,1), NestedResult(1,2), NestedResult(1,3)], Input(0))
+created: object(1,0), object(1,1), object(1,2), object(1,3), object(1,4), object(1,5), object(1,6), object(1,7)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 8892000,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 2, line 12:
+//# create-checkpoint
+Checkpoint created: 1
+
+task 3, lines 14-27:
+//# run-graphql
+Response: {
+  "data": {
+    "transactionEffects": {
+      "objectChanges": {
+        "pageInfo": {
+          "hasPreviousPage": false,
+          "hasNextPage": false,
+          "startCursor": "MA==",
+          "endCursor": "OA=="
+        },
+        "edges": [
+          {
+            "cursor": "MA==",
+            "node": {
+              "address": "0x1c386c8351e93a77e4e46f2abb87f740e2550f64f4c34926e997ccd14bd77aac"
+            }
+          },
+          {
+            "cursor": "MQ==",
+            "node": {
+              "address": "0x20ee8c3dde3949c88ac8919e5a16b10001e17cb84c6c600895e3195f54b59128"
+            }
+          },
+          {
+            "cursor": "Mg==",
+            "node": {
+              "address": "0x3a0235d519078026cafa2eadcbec10a0c355a862c6e77b9d158a589198f1e84d"
+            }
+          },
+          {
+            "cursor": "Mw==",
+            "node": {
+              "address": "0x6804d38b99e301d7f8496d2f6341fbd82e2f6c68f87d3065cc437ae5b0e688de"
+            }
+          },
+          {
+            "cursor": "NA==",
+            "node": {
+              "address": "0x692907ff82a79e7909061b125ed273c181b4863aa352fc2eab6f28cabfd24f66"
+            }
+          },
+          {
+            "cursor": "NQ==",
+            "node": {
+              "address": "0x6c0dacc9db053acd24e4a663789f902e4af716c3e8d309f8eadffc2e199ae398"
+            }
+          },
+          {
+            "cursor": "Ng==",
+            "node": {
+              "address": "0xaeeb66e12bedbdde3f161fd6e7bed850170b87407b61a59e49dfbf668ea0095f"
+            }
+          },
+          {
+            "cursor": "Nw==",
+            "node": {
+              "address": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f"
+            }
+          },
+          {
+            "cursor": "OA==",
+            "node": {
+              "address": "0xf8f65d18c0a399a7f86db9f818db158a1cebde2bd7b1647de4fda49cfcb58bc6"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+
+task 4, lines 29-42:
+//# run-graphql
+Response: {
+  "data": {
+    "transactionEffects": {
+      "objectChanges": {
+        "pageInfo": {
+          "hasPreviousPage": false,
+          "hasNextPage": true,
+          "startCursor": "MA==",
+          "endCursor": "Mg=="
+        },
+        "edges": [
+          {
+            "cursor": "MA==",
+            "node": {
+              "address": "0x1c386c8351e93a77e4e46f2abb87f740e2550f64f4c34926e997ccd14bd77aac"
+            }
+          },
+          {
+            "cursor": "MQ==",
+            "node": {
+              "address": "0x20ee8c3dde3949c88ac8919e5a16b10001e17cb84c6c600895e3195f54b59128"
+            }
+          },
+          {
+            "cursor": "Mg==",
+            "node": {
+              "address": "0x3a0235d519078026cafa2eadcbec10a0c355a862c6e77b9d158a589198f1e84d"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+
+task 5, lines 44-57:
+//# run-graphql
+Response: {
+  "data": {
+    "transactionEffects": {
+      "objectChanges": {
+        "pageInfo": {
+          "hasPreviousPage": true,
+          "hasNextPage": false,
+          "startCursor": "Ng==",
+          "endCursor": "OA=="
+        },
+        "edges": [
+          {
+            "cursor": "Ng==",
+            "node": {
+              "address": "0xaeeb66e12bedbdde3f161fd6e7bed850170b87407b61a59e49dfbf668ea0095f"
+            }
+          },
+          {
+            "cursor": "Nw==",
+            "node": {
+              "address": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f"
+            }
+          },
+          {
+            "cursor": "OA==",
+            "node": {
+              "address": "0xf8f65d18c0a399a7f86db9f818db158a1cebde2bd7b1647de4fda49cfcb58bc6"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+
+task 6, lines 59-72:
+//# run-graphql --cursors 2
+Response: {
+  "data": {
+    "transactionEffects": {
+      "objectChanges": {
+        "pageInfo": {
+          "hasPreviousPage": true,
+          "hasNextPage": true,
+          "startCursor": "Mw==",
+          "endCursor": "NQ=="
+        },
+        "edges": [
+          {
+            "cursor": "Mw==",
+            "node": {
+              "address": "0x6804d38b99e301d7f8496d2f6341fbd82e2f6c68f87d3065cc437ae5b0e688de"
+            }
+          },
+          {
+            "cursor": "NA==",
+            "node": {
+              "address": "0x692907ff82a79e7909061b125ed273c181b4863aa352fc2eab6f28cabfd24f66"
+            }
+          },
+          {
+            "cursor": "NQ==",
+            "node": {
+              "address": "0x6c0dacc9db053acd24e4a663789f902e4af716c3e8d309f8eadffc2e199ae398"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+
+task 7, lines 74-87:
+//# run-graphql --cursors 2
+Response: {
+  "data": {
+    "transactionEffects": {
+      "objectChanges": {
+        "pageInfo": {
+          "hasPreviousPage": true,
+          "hasNextPage": false,
+          "startCursor": "Ng==",
+          "endCursor": "OA=="
+        },
+        "edges": [
+          {
+            "cursor": "Ng==",
+            "node": {
+              "address": "0xaeeb66e12bedbdde3f161fd6e7bed850170b87407b61a59e49dfbf668ea0095f"
+            }
+          },
+          {
+            "cursor": "Nw==",
+            "node": {
+              "address": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f"
+            }
+          },
+          {
+            "cursor": "OA==",
+            "node": {
+              "address": "0xf8f65d18c0a399a7f86db9f818db158a1cebde2bd7b1647de4fda49cfcb58bc6"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+
+task 8, lines 89-102:
+//# run-graphql --cursors 5
+Response: {
+  "data": {
+    "transactionEffects": {
+      "objectChanges": {
+        "pageInfo": {
+          "hasPreviousPage": true,
+          "hasNextPage": false,
+          "startCursor": "Ng==",
+          "endCursor": "OA=="
+        },
+        "edges": [
+          {
+            "cursor": "Ng==",
+            "node": {
+              "address": "0xaeeb66e12bedbdde3f161fd6e7bed850170b87407b61a59e49dfbf668ea0095f"
+            }
+          },
+          {
+            "cursor": "Nw==",
+            "node": {
+              "address": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f"
+            }
+          },
+          {
+            "cursor": "OA==",
+            "node": {
+              "address": "0xf8f65d18c0a399a7f86db9f818db158a1cebde2bd7b1647de4fda49cfcb58bc6"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+
+task 9, lines 104-117:
+//# run-graphql --cursors 5
+Response: {
+  "data": {
+    "transactionEffects": {
+      "objectChanges": {
+        "pageInfo": {
+          "hasPreviousPage": true,
+          "hasNextPage": false,
+          "startCursor": "Ng==",
+          "endCursor": "OA=="
+        },
+        "edges": [
+          {
+            "cursor": "Ng==",
+            "node": {
+              "address": "0xaeeb66e12bedbdde3f161fd6e7bed850170b87407b61a59e49dfbf668ea0095f"
+            }
+          },
+          {
+            "cursor": "Nw==",
+            "node": {
+              "address": "0xb0d826786ad374b9e6e79da4a2d6c8d5f23c413aeb76fa0b07e5636d173a4a8f"
+            }
+          },
+          {
+            "cursor": "OA==",
+            "node": {
+              "address": "0xf8f65d18c0a399a7f86db9f818db158a1cebde2bd7b1647de4fda49cfcb58bc6"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+
+task 10, lines 119-132:
+//# run-graphql --cursors 5
+Response: {
+  "data": {
+    "transactionEffects": {
+      "objectChanges": {
+        "pageInfo": {
+          "hasPreviousPage": true,
+          "hasNextPage": true,
+          "startCursor": "Mg==",
+          "endCursor": "NA=="
+        },
+        "edges": [
+          {
+            "cursor": "Mg==",
+            "node": {
+              "address": "0x3a0235d519078026cafa2eadcbec10a0c355a862c6e77b9d158a589198f1e84d"
+            }
+          },
+          {
+            "cursor": "Mw==",
+            "node": {
+              "address": "0x6804d38b99e301d7f8496d2f6341fbd82e2f6c68f87d3065cc437ae5b0e688de"
+            }
+          },
+          {
+            "cursor": "NA==",
+            "node": {
+              "address": "0x692907ff82a79e7909061b125ed273c181b4863aa352fc2eab6f28cabfd24f66"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+
+task 11, lines 134-147:
+//# run-graphql --cursors 5
+Response: {
+  "data": {
+    "transactionEffects": {
+      "objectChanges": {
+        "pageInfo": {
+          "hasPreviousPage": false,
+          "hasNextPage": true,
+          "startCursor": "MA==",
+          "endCursor": "Mg=="
+        },
+        "edges": [
+          {
+            "cursor": "MA==",
+            "node": {
+              "address": "0x1c386c8351e93a77e4e46f2abb87f740e2550f64f4c34926e997ccd14bd77aac"
+            }
+          },
+          {
+            "cursor": "MQ==",
+            "node": {
+              "address": "0x20ee8c3dde3949c88ac8919e5a16b10001e17cb84c6c600895e3195f54b59128"
+            }
+          },
+          {
+            "cursor": "Mg==",
+            "node": {
+              "address": "0x3a0235d519078026cafa2eadcbec10a0c355a862c6e77b9d158a589198f1e84d"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+
+task 12, lines 149-162:
+//# run-graphql --cursors 2
+Response: {
+  "data": {
+    "transactionEffects": {
+      "objectChanges": {
+        "pageInfo": {
+          "hasPreviousPage": false,
+          "hasNextPage": true,
+          "startCursor": "MA==",
+          "endCursor": "MQ=="
+        },
+        "edges": [
+          {
+            "cursor": "MA==",
+            "node": {
+              "address": "0x1c386c8351e93a77e4e46f2abb87f740e2550f64f4c34926e997ccd14bd77aac"
+            }
+          },
+          {
+            "cursor": "MQ==",
+            "node": {
+              "address": "0x20ee8c3dde3949c88ac8919e5a16b10001e17cb84c6c600895e3195f54b59128"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+
+task 13, lines 164-177:
+//# run-graphql --cursors 2
+Response: {
+  "data": {
+    "transactionEffects": {
+      "objectChanges": {
+        "pageInfo": {
+          "hasPreviousPage": false,
+          "hasNextPage": true,
+          "startCursor": "MA==",
+          "endCursor": "MQ=="
+        },
+        "edges": [
+          {
+            "cursor": "MA==",
+            "node": {
+              "address": "0x1c386c8351e93a77e4e46f2abb87f740e2550f64f4c34926e997ccd14bd77aac"
+            }
+          },
+          {
+            "cursor": "MQ==",
+            "node": {
+              "address": "0x20ee8c3dde3949c88ac8919e5a16b10001e17cb84c6c600895e3195f54b59128"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+
+task 14, lines 179-192:
+//# run-graphql --cursors 2 6
+Response: {
+  "data": {
+    "transactionEffects": {
+      "objectChanges": {
+        "pageInfo": {
+          "hasPreviousPage": true,
+          "hasNextPage": true,
+          "startCursor": "Mw==",
+          "endCursor": "NQ=="
+        },
+        "edges": [
+          {
+            "cursor": "Mw==",
+            "node": {
+              "address": "0x6804d38b99e301d7f8496d2f6341fbd82e2f6c68f87d3065cc437ae5b0e688de"
+            }
+          },
+          {
+            "cursor": "NA==",
+            "node": {
+              "address": "0x692907ff82a79e7909061b125ed273c181b4863aa352fc2eab6f28cabfd24f66"
+            }
+          },
+          {
+            "cursor": "NQ==",
+            "node": {
+              "address": "0x6c0dacc9db053acd24e4a663789f902e4af716c3e8d309f8eadffc2e199ae398"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+
+task 15, lines 194-207:
+//# run-graphql --cursors 2 6
+Response: {
+  "data": {
+    "transactionEffects": {
+      "objectChanges": {
+        "pageInfo": {
+          "hasPreviousPage": true,
+          "hasNextPage": true,
+          "startCursor": "Mw==",
+          "endCursor": "NA=="
+        },
+        "edges": [
+          {
+            "cursor": "Mw==",
+            "node": {
+              "address": "0x6804d38b99e301d7f8496d2f6341fbd82e2f6c68f87d3065cc437ae5b0e688de"
+            }
+          },
+          {
+            "cursor": "NA==",
+            "node": {
+              "address": "0x692907ff82a79e7909061b125ed273c181b4863aa352fc2eab6f28cabfd24f66"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+
+task 16, lines 209-222:
+//# run-graphql --cursors 2 6
+Response: {
+  "data": {
+    "transactionEffects": {
+      "objectChanges": {
+        "pageInfo": {
+          "hasPreviousPage": true,
+          "hasNextPage": true,
+          "startCursor": "NA==",
+          "endCursor": "NQ=="
+        },
+        "edges": [
+          {
+            "cursor": "NA==",
+            "node": {
+              "address": "0x692907ff82a79e7909061b125ed273c181b4863aa352fc2eab6f28cabfd24f66"
+            }
+          },
+          {
+            "cursor": "NQ==",
+            "node": {
+              "address": "0x6c0dacc9db053acd24e4a663789f902e4af716c3e8d309f8eadffc2e199ae398"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
