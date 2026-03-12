@@ -1,0 +1,575 @@
+// Copyright (c) The Diem Core Contributors
+// Copyright (c) The Move Contributors
+// SPDX-License-Identifier: Apache-2.0
+
+use crate::{
+    framework::{CompiledState, MaybeNamedCompiledModule, MoveTestAdapter, run_test_impl},
+    tasks::{EmptyCommand, InitCommand, SyntaxChoice, TaskInput, parse_qualified_module_access},
+};
+
+use move_binary_format::{
+    CompiledModule,
+    errors::{Location, VMError, VMResult},
+    file_format::{EnumDefinitionIndex, FieldHandleIndex, LocalIndex, MemberCount, VariantTag},
+};
+use move_bytecode_source_map::source_map::{FunctionSourceMap, SourceMap};
+use move_bytecode_verifier::{absint::FunctionContext, regex_reference_safety};
+use move_bytecode_verifier_meter::dummy::DummyMeter;
+use move_command_line_common::{
+    files::verify_and_create_named_address_mapping, testing::InstaOptions,
+};
+use move_compiler::{PreCompiledProgramInfo, editions::Edition, shared::PackagePaths};
+use move_core_types::{
+    account_address::AccountAddress,
+    identifier::IdentStr,
+    language_storage::{ModuleId, TypeTag},
+    runtime_value::MoveValue,
+};
+use move_core_types::{identifier::Identifier, parsing::address::ParsedAddress};
+use move_regex_borrow_graph::references::Ref;
+use move_stdlib::named_addresses as move_stdlib_named_addresses;
+use move_symbol_pool::Symbol;
+use move_vm_config::runtime::VMConfig;
+use move_vm_runtime::{
+    move_vm::MoveVM,
+    session::{SerializedReturnValues, Session},
+};
+use move_vm_test_utils::{InMemoryStorage, gas_schedule::GasStatus};
+
+use anyhow::{Error, Result, anyhow, bail};
+use async_trait::async_trait;
+use clap::Parser;
+use std::{
+    collections::BTreeMap,
+    path::Path,
+    sync::{Arc, LazyLock},
+};
+
+pub static SWITCH_TO_REGEX_REFERENCE_SAFETY: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+const STD_ADDR: AccountAddress = AccountAddress::ONE;
+
+struct SimpleVMTestAdapter {
+    switch_to_regex_reference_safety: bool,
+    compiled_state: CompiledState,
+    storage: InMemoryStorage,
+    default_syntax: SyntaxChoice,
+}
+
+#[derive(Debug, Parser)]
+pub struct AdapterInitArgs {
+    #[arg(long = "edition")]
+    pub edition: Option<Edition>,
+}
+
+#[derive(Debug, Parser)]
+pub enum Subcommand {
+    ViewAbstractState(ViewAbstractStateCommand),
+}
+
+#[derive(Debug, Parser)]
+pub struct ViewAbstractStateCommand {
+    #[clap(name = "NAME", value_parser = parse_qualified_module_access)]
+    pub name: (ParsedAddress, Identifier, Identifier),
+}
+
+#[async_trait]
+impl MoveTestAdapter<'_> for SimpleVMTestAdapter {
+    type ExtraInitArgs = AdapterInitArgs;
+    type ExtraPublishArgs = EmptyCommand;
+    type ExtraValueArgs = ();
+    type ExtraRunArgs = EmptyCommand;
+    type Subcommand = Subcommand;
+
+    fn compiled_state(&mut self) -> &mut CompiledState {
+        &mut self.compiled_state
+    }
+
+    fn default_syntax(&self) -> SyntaxChoice {
+        self.default_syntax
+    }
+
+    async fn init(
+        default_syntax: SyntaxChoice,
+        pre_compiled_deps: Option<Arc<PreCompiledProgramInfo>>,
+        task_opt: Option<TaskInput<(InitCommand, Self::ExtraInitArgs)>>,
+        _path: &Path,
+    ) -> (Self, Option<String>) {
+        let (additional_mapping, compiler_edition) = match task_opt.map(|t| t.command) {
+            Some((InitCommand { named_addresses }, AdapterInitArgs { edition })) => {
+                let addresses = verify_and_create_named_address_mapping(named_addresses).unwrap();
+                let compiler_edition = edition.unwrap_or(Edition::LEGACY);
+                (addresses, compiler_edition)
+            }
+            None => (BTreeMap::new(), Edition::LEGACY),
+        };
+        let switch_to_regex_reference_safety =
+            SWITCH_TO_REGEX_REFERENCE_SAFETY.get().copied().unwrap();
+
+        let mut named_address_mapping = move_stdlib_named_addresses();
+        for (name, addr) in additional_mapping {
+            if named_address_mapping.contains_key(&name) {
+                panic!(
+                    "Invalid init. The named address '{}' is reserved by the move-stdlib",
+                    name
+                )
+            }
+            named_address_mapping.insert(name, addr);
+        }
+        let mut adapter = Self {
+            switch_to_regex_reference_safety,
+            compiled_state: CompiledState::new(
+                named_address_mapping,
+                pre_compiled_deps,
+                None,
+                Some(compiler_edition),
+                None,
+            ),
+            default_syntax,
+            storage: InMemoryStorage::new(),
+        };
+
+        adapter
+            .perform_session_action(None, |session, gas_status| {
+                for (module, _) in &*MOVE_STDLIB_COMPILED {
+                    let mut module_bytes = vec![];
+                    module
+                        .serialize_with_version(module.version, &mut module_bytes)
+                        .unwrap();
+
+                    let id = module.self_id();
+                    let sender = *id.address();
+                    session
+                        .publish_module(module_bytes, sender, gas_status)
+                        .unwrap();
+                }
+                Ok(())
+            })
+            .unwrap();
+        let mut addr_to_name_mapping = BTreeMap::new();
+        for (name, addr) in move_stdlib_named_addresses() {
+            let prev = addr_to_name_mapping.insert(addr, Symbol::from(name));
+            assert!(prev.is_none());
+        }
+        for (module, source_map) in MOVE_STDLIB_COMPILED
+            .iter()
+            .filter(|(module, _)| !adapter.compiled_state.is_precompiled_dep(&module.self_id()))
+            .collect::<Vec<_>>()
+        {
+            adapter
+                .compiled_state
+                .add_and_generate_interface_file(module.clone(), Some(source_map.clone()));
+        }
+        (adapter, None)
+    }
+
+    async fn publish_modules(
+        &mut self,
+        modules: Vec<MaybeNamedCompiledModule>,
+        gas_budget: Option<u64>,
+        _extra_args: Self::ExtraPublishArgs,
+    ) -> Result<(Option<String>, Vec<MaybeNamedCompiledModule>)> {
+        let all_bytes = modules
+            .iter()
+            .map(|m| {
+                let mut module_bytes = vec![];
+                m.module
+                    .serialize_with_version(m.module.version, &mut module_bytes)?;
+                Ok(module_bytes)
+            })
+            .collect::<Result<_>>()?;
+
+        let id = modules.first().unwrap().module.self_id();
+        let sender = *id.address();
+        match self.perform_session_action(gas_budget, |session, gas_status| {
+            session.publish_module_bundle(all_bytes, sender, gas_status)
+        }) {
+            Ok(()) => Ok((None, modules)),
+            Err(e) => Err(anyhow!(
+                "Unable to publish module '{}'. Got VMError: {}",
+                id,
+                format_vm_error(&e)
+            )),
+        }
+    }
+
+    async fn call_function(
+        &mut self,
+        module: &ModuleId,
+        function: &IdentStr,
+        type_arg_tags: Vec<TypeTag>,
+        signers: Vec<ParsedAddress>,
+        txn_args: Vec<MoveValue>,
+        gas_budget: Option<u64>,
+        _extra_args: Self::ExtraRunArgs,
+    ) -> Result<(Option<String>, SerializedReturnValues)> {
+        let signers: Vec<_> = signers
+            .into_iter()
+            .map(|addr| self.compiled_state().resolve_address(&addr))
+            .collect();
+
+        let args = txn_args
+            .iter()
+            .map(|arg| arg.simple_serialize().unwrap())
+            .collect::<Vec<_>>();
+        // TODO rethink testing signer args
+        let args = signers
+            .iter()
+            .map(|a| MoveValue::Signer(*a).simple_serialize().unwrap())
+            .chain(args)
+            .collect();
+        let serialized_return_values = self
+            .perform_session_action(gas_budget, |session, gas_status| {
+                let type_args: Vec<_> = type_arg_tags
+                    .into_iter()
+                    .map(|tag| session.load_type(&tag))
+                    .collect::<VMResult<_>>()?;
+
+                session.execute_function_bypass_visibility(
+                    module, function, type_args, args, gas_status, None,
+                )
+            })
+            .map_err(|e| {
+                anyhow!(
+                    "Function execution failed with VMError: {}",
+                    format_vm_error(&e)
+                )
+            })?;
+        Ok((None, serialized_return_values))
+    }
+
+    async fn handle_subcommand(
+        &mut self,
+        task: TaskInput<Self::Subcommand>,
+    ) -> Result<Option<String>> {
+        let TaskInput {
+            command,
+            name: _,
+            number: _,
+            start_line: _,
+            command_lines_stop: _,
+            stop_line: _,
+            data: _,
+            task_text: _,
+        } = task;
+        match command {
+            Subcommand::ViewAbstractState(view_abstract_state_command) => {
+                if !self.switch_to_regex_reference_safety {
+                    return Ok(Some(
+                        "view-abstract-state subcommand is only available with regex \
+                         reference safety"
+                            .to_string(),
+                    ));
+                }
+                let ViewAbstractStateCommand {
+                    name: (raw_addr, module, function),
+                } = view_abstract_state_command;
+                let addr = self.compiled_state().resolve_address(&raw_addr);
+                let module_id = ModuleId::new(addr, module);
+                let vm = self.new_vm();
+                let Ok(module) = vm.load_module(&module_id, &self.storage) else {
+                    bail!("Module '{}' not found", module_id);
+                };
+                let Some((fdef_idx, fdef)) = module.find_function_def_by_name(function.as_str())
+                else {
+                    bail!(
+                        "Function '{}' not found in module '{}'",
+                        function,
+                        module_id
+                    );
+                };
+                let fhandle = module.function_handle_at(fdef.function);
+                let Some(code) = &fdef.code else {
+                    return Err(anyhow!(
+                        "Cannot analyze native function '{module_id}::{function}'",
+                    ));
+                };
+                let function_context = FunctionContext::new(&module, fdef_idx, code, fhandle);
+
+                let verifier_config = &vm.config().verifier;
+                let states =
+                    move_bytecode_verifier::regex_reference_safety::verify_and_return_states(
+                        verifier_config,
+                        module.as_ref(),
+                        &function_context,
+                        &mut DummyMeter,
+                    )?;
+
+                // Create a dummy source map for the module to get local/field names
+                let Some(source_map) = self.compiled_state.source_map(&module_id) else {
+                    bail!("Source map not found for module '{}'", module_id);
+                };
+                let Ok(function_source_map) = source_map.get_function_source_map(fdef_idx) else {
+                    bail!(
+                        "Function source map not found for function '{}::{}'",
+                        module_id,
+                        function
+                    )
+                };
+
+                // Serialize each state
+                let mut serializer =
+                    SourceMapRegexStateSerializer::new(module.as_ref(), function_source_map);
+                let serializable_states: BTreeMap<_, _> = states
+                    .into_iter()
+                    .map(|(offset, state)| {
+                        // TODO get label for offset for mvir
+                        (offset, state.pre.to_serializable(&mut serializer))
+                    })
+                    .collect();
+
+                let json = serde_json::to_string_pretty(&serializable_states)
+                    .map_err(|e| anyhow!("Failed to serialize states: {}", e))?;
+                Ok(Some(json))
+            }
+        }
+    }
+
+    async fn process_error(&self, err: Error) -> Error {
+        err
+    }
+}
+
+pub fn format_vm_error(e: &VMError) -> String {
+    let location_string = match e.location() {
+        Location::Undefined => "undefined".to_owned(),
+        Location::Module(id) => format!("0x{}::{}", id.address().short_str_lossless(), id.name()),
+    };
+    format!(
+        "{{
+    major_status: {major_status:?},
+    sub_status: {sub_status:?},
+    location: {location_string},
+    indices: {indices:?},
+    offsets: {offsets:?},
+}}",
+        major_status = e.major_status(),
+        sub_status = e.sub_status(),
+        location_string = location_string,
+        // TODO maybe include source map info?
+        indices = e.indices(),
+        offsets = e.offsets(),
+    )
+}
+
+impl SimpleVMTestAdapter {
+    fn new_vm(&self) -> MoveVM {
+        MoveVM::new_with_config(
+            move_stdlib_natives::all_natives(
+                STD_ADDR,
+                // TODO: come up with a suitable gas schedule
+                move_stdlib_natives::GasParameters::zeros(),
+                /* silent */ false,
+            ),
+            self.vm_config(),
+        )
+        .unwrap()
+    }
+
+    fn perform_session_action<Ret>(
+        &mut self,
+        gas_budget: Option<u64>,
+        f: impl FnOnce(&mut Session<&InMemoryStorage>, &mut GasStatus) -> VMResult<Ret>,
+    ) -> VMResult<Ret> {
+        // start session
+        let vm = self.new_vm();
+        let (mut session, mut gas_status) = {
+            let gas_status = move_cli::sandbox::utils::get_gas_status(
+                &move_vm_test_utils::gas_schedule::INITIAL_COST_SCHEDULE,
+                gas_budget,
+            )
+            .unwrap();
+            let session = vm.new_session(&self.storage);
+            (session, gas_status)
+        };
+
+        // perform op
+        let res = f(&mut session, &mut gas_status)?;
+
+        // save changeset
+        // TODO support events
+        let changeset = session.finish().0?;
+        self.storage.apply(changeset).unwrap();
+        Ok(res)
+    }
+
+    fn vm_config(&self) -> VMConfig {
+        let mut vm_config = VMConfig {
+            enable_invariant_violation_check_in_swap_loc: false,
+            deprecate_global_storage_ops_during_deserialization: true,
+            binary_config: move_binary_format::binary_config::BinaryConfig::legacy_with_flags(
+                /* check_no_extraneous_bytes */ true,
+                /* deprecate_global_storage_ops */ true,
+            ),
+            ..VMConfig::default()
+        };
+        if self.switch_to_regex_reference_safety {
+            assert!(
+                !vm_config.verifier.switch_to_regex_reference_safety,
+                "switch_to_regex_reference_safety should be false by default. \
+                If this is no longer the case, the flag should be removed from tests"
+            );
+            vm_config.verifier.switch_to_regex_reference_safety = true;
+        }
+        vm_config
+    }
+}
+
+pub static PRECOMPILED_MOVE_STDLIB: LazyLock<PreCompiledProgramInfo> = LazyLock::new(|| {
+    let program_res = move_compiler::construct_pre_compiled_lib(
+        vec![PackagePaths {
+            name: None,
+            paths: move_stdlib::source_files(),
+            named_address_map: move_stdlib::named_addresses(),
+        }],
+        None,
+        None,
+        false,
+        move_compiler::Flags::empty(),
+        None,
+    )
+    .unwrap();
+    match program_res {
+        Ok(modules_info) => modules_info,
+        Err((files, errors)) => {
+            eprintln!("!!!Standard library failed to compile!!!");
+            move_compiler::diagnostics::report_diagnostics(&files, errors)
+        }
+    }
+});
+
+static MOVE_STDLIB_COMPILED: LazyLock<Vec<(CompiledModule, SourceMap)>> = LazyLock::new(|| {
+    let (files, units_res) = move_compiler::Compiler::from_files(
+        None,
+        move_stdlib::source_files(),
+        vec![],
+        move_stdlib::named_addresses(),
+    )
+    .build()
+    .unwrap();
+    match units_res {
+        Err(diags) => {
+            eprintln!("!!!Standard library failed to compile!!!");
+            move_compiler::diagnostics::report_diagnostics(&files, diags)
+        }
+        Ok((_, warnings)) if !warnings.is_empty() => {
+            eprintln!("!!!Standard library failed to compile!!!");
+            move_compiler::diagnostics::report_diagnostics(&files, warnings)
+        }
+        Ok((units, _warnings)) => units
+            .into_iter()
+            .map(|annot_module| {
+                (
+                    annot_module.named_module.module,
+                    annot_module.named_module.source_map,
+                )
+            })
+            .collect(),
+    }
+});
+
+#[tokio::main]
+pub async fn run_test(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    SWITCH_TO_REGEX_REFERENCE_SAFETY.set(false).unwrap();
+    run_test_impl::<SimpleVMTestAdapter>(
+        path,
+        Some(Arc::new(PRECOMPILED_MOVE_STDLIB.clone())),
+        None,
+    )
+    .await
+}
+
+#[tokio::main]
+pub async fn run_test_with_regex_reference_safety(
+    path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    SWITCH_TO_REGEX_REFERENCE_SAFETY.set(true).unwrap();
+    let mut options = InstaOptions::new();
+    if path
+        .components()
+        .any(|c| c.as_os_str() == "reference_safety")
+    {
+        options.suffix("regex");
+    }
+    run_test_impl::<SimpleVMTestAdapter>(
+        path,
+        Some(Arc::new(PRECOMPILED_MOVE_STDLIB.clone())),
+        Some(options),
+    )
+    .await
+}
+
+//**************************************************************************************************
+// StateSerializer Implementation
+//**************************************************************************************************
+
+pub struct SourceMapRegexStateSerializer<'a> {
+    module: &'a CompiledModule,
+    function_source_map: &'a FunctionSourceMap,
+}
+
+impl<'a> SourceMapRegexStateSerializer<'a> {
+    pub fn new(module: &'a CompiledModule, function_source_map: &'a FunctionSourceMap) -> Self {
+        Self {
+            module,
+            function_source_map,
+        }
+    }
+}
+
+impl regex_reference_safety::serializable_state::StateSerializer
+    for SourceMapRegexStateSerializer<'_>
+{
+    fn local_root(&mut self, _: Ref) -> String {
+        "ROOT".to_owned()
+    }
+
+    fn ref_(&mut self, idx: LocalIndex, _: Ref) -> String {
+        format!("r#{}", self.local(idx))
+    }
+
+    fn local(&mut self, idx: LocalIndex) -> String {
+        self.function_source_map
+            .get_parameter_or_local_name(idx as u64)
+            .map(|(name, _)| name)
+            .unwrap_or_else(|| format!("local#{}", idx))
+    }
+
+    fn label_local(&mut self, idx: LocalIndex) -> String {
+        self.function_source_map
+            .get_parameter_or_local_name(idx as u64)
+            .map(|(name, _)| name)
+            .unwrap_or_else(|| format!("local#{}", idx))
+    }
+
+    fn label_field(&mut self, idx: FieldHandleIndex) -> String {
+        let field_handle = self.module.field_handle_at(idx);
+        let struct_def = self.module.struct_def_at(field_handle.owner);
+        let struct_handle = self.module.datatype_handle_at(struct_def.struct_handle);
+        let struct_name = self.module.identifier_at(struct_handle.name);
+        let field_name = struct_def
+            .field(field_handle.field as usize)
+            .map(|field_def| self.module.identifier_at(field_def.name).to_string())
+            .unwrap_or_else(|| format!("field#{}", field_handle.field));
+        format!("{}.{}", struct_name, field_name)
+    }
+
+    fn label_variant_field(
+        &mut self,
+        enum_def_idx: EnumDefinitionIndex,
+        tag: VariantTag,
+        field_idx: MemberCount,
+    ) -> String {
+        let enum_def = self.module.enum_def_at(enum_def_idx);
+        let enum_handle = self.module.datatype_handle_at(enum_def.enum_handle);
+        let enum_name = self.module.identifier_at(enum_handle.name);
+        let variant_def = self.module.variant_def_at(enum_def_idx, tag);
+        let variant_name = self.module.identifier_at(variant_def.variant_name);
+        let field_name = variant_def
+            .fields
+            .get(field_idx as usize)
+            .map(|field_def| self.module.identifier_at(field_def.name).to_string())
+            .unwrap_or_else(|| format!("field#{}", field_idx));
+        format!("{}::{}.{}", enum_name, variant_name, field_name)
+    }
+}
