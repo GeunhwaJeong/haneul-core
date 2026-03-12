@@ -1,0 +1,86 @@
+[package]
+name = "haneul-indexer-alt-graphql"
+version.workspace = true
+authors = ["Haneul Labs <build@haneul-labs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[[bin]]
+name = "haneul-indexer-alt-graphql"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-graphql = { workspace = true, features = ["dataloader", "tracing"] }
+async-graphql-axum.workspace = true
+async-graphql-value.workspace = true
+async-trait.workspace = true
+# axum.workspace = true
+# axum-extra.workspace = true
+axum = { version = "0.7", default-features = false, features = [ "macros", "tokio", "http1", "http2", "json", "matched-path", "original-uri", "form", "query", "ws", ] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
+bcs.workspace = true
+chrono.workspace = true
+clap.workspace = true
+const-str.workspace = true
+diesel.workspace = true
+diesel-async.workspace = true
+fastcrypto.workspace = true
+fastcrypto-zkp.workspace = true
+futures.workspace = true
+headers.workspace = true
+im.workspace = true
+itertools.workspace = true
+pin-project.workspace = true
+prometheus.workspace = true
+prost-types.workspace = true
+rustls.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+shared-crypto.workspace = true
+telemetry-subscribers.workspace = true
+thiserror.workspace = true
+timeout-tracing.workspace = true
+tokio.workspace = true
+toml.workspace = true
+tonic.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-error.workspace = true
+tracing-subscriber.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+move-binary-format.workspace = true
+move-core-types.workspace = true
+move-disassembler.workspace = true
+move-ir-types.workspace = true
+
+bin-version.workspace = true
+haneul-default-config.workspace = true
+haneul-display.workspace = true
+haneul-futures.workspace = true
+haneul-indexer-alt-metrics.workspace = true
+haneul-indexer-alt-reader.workspace = true
+haneul-indexer-alt-schema.workspace = true
+haneul-name-service.workspace = true
+haneul-package-resolver.workspace = true
+haneul-pg-db.workspace = true
+haneul-protocol-config.workspace = true
+haneul-rpc.workspace = true
+haneul-rpc-api.workspace = true
+haneul-sdk-types.workspace = true
+haneul-sql-macro.workspace = true
+haneul-types.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+reqwest.workspace = true
+regex.workspace = true
+
+[features]
+staging = []
