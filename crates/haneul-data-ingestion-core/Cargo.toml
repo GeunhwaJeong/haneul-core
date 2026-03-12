@@ -1,0 +1,37 @@
+[package]
+name = "haneul-data-ingestion-core"
+authors = ["Haneul Labs <build@haneul-labs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+version = "0.1.0"
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+backoff.workspace = true
+bcs.workspace = true
+futures.workspace = true
+haneullabs-metrics.workspace = true
+notify.workspace = true
+prost.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+object_store.workspace = true
+prometheus.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tokio-stream.workspace = true
+tracing.workspace = true
+haneul-rpc.workspace = true
+haneul-storage.workspace = true
+haneul-types.workspace = true
+url.workspace = true
+tempfile.workspace = true
+tap.workspace = true
+haneul-protocol-config.workspace = true
+haneul-rpc-api.workspace = true
+once_cell.workspace = true
+zstd.workspace = true
+
+[dev-dependencies]
+rand.workspace = true
