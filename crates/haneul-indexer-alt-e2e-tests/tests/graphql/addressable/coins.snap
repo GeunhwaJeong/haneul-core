@@ -1,0 +1,645 @@
+---
+source: external-crates/move/crates/move-transactional-test-runner/src/framework.rs
+---
+processed 13 tasks
+
+init:
+A: object(0,0), B: object(0,1)
+
+task 1, lines 6-26:
+//# publish --sender A
+created: object(1,0), object(1,1), object(1,2), object(1,3), object(1,4), object(1,5), object(1,6)
+mutated: object(0,0)
+unchanged_shared: 0x0000000000000000000000000000000000000000000000000000000000000403
+gas summary: computation_cost: 1000000, storage_cost: 16864400,  storage_rebate: 0, non_refundable_storage_fee: 0
+
+task 2, line 28:
+//# create-checkpoint
+Checkpoint created: 1
+
+task 3, lines 30-32:
+//# programmable --sender A --inputs 1000 @A
+//> 0: SplitCoins(Gas, [Input(0)]);
+//> 1: TransferObjects([Result(0)], Input(1))
+created: object(3,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 4, lines 34-36:
+//# programmable --sender A --inputs 500 @A
+//> 0: SplitCoins(Gas, [Input(0)]);
+//> 1: TransferObjects([Result(0)], Input(1))
+created: object(4,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 5, lines 38-40:
+//# programmable --sender A --inputs @A
+//> 0: haneul::bag::new();
+//> 1: TransferObjects([Result(0)], Input(0))
+created: object(5,0)
+mutated: object(0,0)
+gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+
+task 6, line 42:
+//# create-checkpoint
+Checkpoint created: 2
+
+task 7, lines 44-45:
+//# programmable --sender A --inputs object(1,0) @B
+//> TransferObjects([Input(0)], Input(1))
+mutated: object(0,0), object(1,0)
+unchanged_shared: 0x0000000000000000000000000000000000000000000000000000000000000403
+gas summary: computation_cost: 1000000, storage_cost: 2310400,  storage_rebate: 2287296, non_refundable_storage_fee: 23104
+
+task 8, lines 47-48:
+//# programmable --sender A --inputs object(3,0) @B
+//> TransferObjects([Input(0)], Input(1))
+mutated: object(0,0), object(3,0)
+gas summary: computation_cost: 1000000, storage_cost: 1976000,  storage_rebate: 1956240, non_refundable_storage_fee: 19760
+
+task 9, line 50:
+//# create-checkpoint
+Checkpoint created: 3
+
+task 10, lines 52-109:
+//# run-graphql
+Response: {
+  "data": {
+    "accountA": {
+      "allObjects": {
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "address": "0xef5a7ec258273ff064fdd722bd9d20d811ea459aad1436f096be26b6481ea772",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::bag::Bag"
+              },
+              "json": {
+                "id": "0xef5a7ec258273ff064fdd722bd9d20d811ea459aad1436f096be26b6481ea772",
+                "size": "0"
+              }
+            }
+          },
+          {
+            "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+              },
+              "json": {
+                "id": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+                "balance": "299999973785996"
+              }
+            }
+          },
+          {
+            "address": "0x77e12fc740054c1e8eb2a50ca536da588e57782b69b0b9c1478abcfc459effe5",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+              },
+              "json": {
+                "id": "0x77e12fc740054c1e8eb2a50ca536da588e57782b69b0b9c1478abcfc459effe5",
+                "balance": "500"
+              }
+            }
+          },
+          {
+            "address": "0xd3ecc9bbada9a805607b77f7fa2568c36485c76b79cca31cfa6ca7653cfd7c3d",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST>"
+              },
+              "json": {
+                "id": "0xd3ecc9bbada9a805607b77f7fa2568c36485c76b79cca31cfa6ca7653cfd7c3d",
+                "balance": "500000"
+              }
+            }
+          },
+          {
+            "address": "0x4f376d0e3919cf473fec48b9cce572a0ed93ade16194beff270d1b644bc543c6",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST>"
+              },
+              "json": {
+                "id": "0x4f376d0e3919cf473fec48b9cce572a0ed93ade16194beff270d1b644bc543c6",
+                "balance": "250000"
+              }
+            }
+          },
+          {
+            "address": "0xaded07562805c4c983009e1572dbeb1ec61e266472e89c90ce60678cd995fb5e",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST>"
+              },
+              "json": {
+                "id": "0xaded07562805c4c983009e1572dbeb1ec61e266472e89c90ce60678cd995fb5e",
+                "balance": "100000"
+              }
+            }
+          },
+          {
+            "address": "0xbc86a7e937051a8b02891a9aa693330183d036b2e14b9036b248b4f265abc060",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::TreasuryCap<0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST>"
+              },
+              "json": {
+                "id": "0xbc86a7e937051a8b02891a9aa693330183d036b2e14b9036b248b4f265abc060",
+                "total_supply": {
+                  "value": "1850000"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "allCoins": {
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+              },
+              "json": {
+                "id": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+                "balance": "299999973785996"
+              }
+            }
+          },
+          {
+            "address": "0x77e12fc740054c1e8eb2a50ca536da588e57782b69b0b9c1478abcfc459effe5",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+              },
+              "json": {
+                "id": "0x77e12fc740054c1e8eb2a50ca536da588e57782b69b0b9c1478abcfc459effe5",
+                "balance": "500"
+              }
+            }
+          },
+          {
+            "address": "0xd3ecc9bbada9a805607b77f7fa2568c36485c76b79cca31cfa6ca7653cfd7c3d",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST>"
+              },
+              "json": {
+                "id": "0xd3ecc9bbada9a805607b77f7fa2568c36485c76b79cca31cfa6ca7653cfd7c3d",
+                "balance": "500000"
+              }
+            }
+          },
+          {
+            "address": "0x4f376d0e3919cf473fec48b9cce572a0ed93ade16194beff270d1b644bc543c6",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST>"
+              },
+              "json": {
+                "id": "0x4f376d0e3919cf473fec48b9cce572a0ed93ade16194beff270d1b644bc543c6",
+                "balance": "250000"
+              }
+            }
+          },
+          {
+            "address": "0xaded07562805c4c983009e1572dbeb1ec61e266472e89c90ce60678cd995fb5e",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST>"
+              },
+              "json": {
+                "id": "0xaded07562805c4c983009e1572dbeb1ec61e266472e89c90ce60678cd995fb5e",
+                "balance": "100000"
+              }
+            }
+          }
+        ]
+      },
+      "testCoins": {
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "address": "0xd3ecc9bbada9a805607b77f7fa2568c36485c76b79cca31cfa6ca7653cfd7c3d",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST>"
+              },
+              "json": {
+                "id": "0xd3ecc9bbada9a805607b77f7fa2568c36485c76b79cca31cfa6ca7653cfd7c3d",
+                "balance": "500000"
+              }
+            }
+          },
+          {
+            "address": "0x4f376d0e3919cf473fec48b9cce572a0ed93ade16194beff270d1b644bc543c6",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST>"
+              },
+              "json": {
+                "id": "0x4f376d0e3919cf473fec48b9cce572a0ed93ade16194beff270d1b644bc543c6",
+                "balance": "250000"
+              }
+            }
+          },
+          {
+            "address": "0xaded07562805c4c983009e1572dbeb1ec61e266472e89c90ce60678cd995fb5e",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST>"
+              },
+              "json": {
+                "id": "0xaded07562805c4c983009e1572dbeb1ec61e266472e89c90ce60678cd995fb5e",
+                "balance": "100000"
+              }
+            }
+          }
+        ]
+      },
+      "haneulCoins": {
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+              },
+              "json": {
+                "id": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+                "balance": "299999973785996"
+              }
+            }
+          },
+          {
+            "address": "0x77e12fc740054c1e8eb2a50ca536da588e57782b69b0b9c1478abcfc459effe5",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+              },
+              "json": {
+                "id": "0x77e12fc740054c1e8eb2a50ca536da588e57782b69b0b9c1478abcfc459effe5",
+                "balance": "500"
+              }
+            }
+          }
+        ]
+      },
+      "testBalance": {
+        "coinType": {
+          "repr": "0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST"
+        },
+        "totalBalance": "850000"
+      },
+      "haneulBalance": {
+        "coinType": {
+          "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL"
+        },
+        "totalBalance": "299999973786496"
+      },
+      "emptyBalance": {
+        "coinType": {
+          "repr": "0x0000000000000000000000000000000000000000000000000000000000000042::empty::COIN"
+        },
+        "totalBalance": "0"
+      },
+      "multiGetBalances": [
+        {
+          "coinType": {
+            "repr": "0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST"
+          },
+          "totalBalance": "850000"
+        },
+        {
+          "coinType": {
+            "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL"
+          },
+          "totalBalance": "299999973786496"
+        },
+        {
+          "coinType": {
+            "repr": "0x0000000000000000000000000000000000000000000000000000000000000042::empty::COIN"
+          },
+          "totalBalance": "0"
+        }
+      ],
+      "balances": {
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "coinType": {
+              "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL"
+            },
+            "totalBalance": "299999973786496"
+          },
+          {
+            "coinType": {
+              "repr": "0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST"
+            },
+            "totalBalance": "850000"
+          }
+        ]
+      }
+    }
+  }
+}
+
+task 11, lines 111-161:
+//# run-graphql
+Response: {
+  "data": {
+    "accountB": {
+      "allObjects": {
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "address": "0x37cf3a6d7bfb547e9eaf95377bde64a81d8a954a38fcb37595663d5ab3c878c8",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+              },
+              "json": {
+                "id": "0x37cf3a6d7bfb547e9eaf95377bde64a81d8a954a38fcb37595663d5ab3c878c8",
+                "balance": "300000000000000"
+              }
+            }
+          },
+          {
+            "address": "0xbffc5985db34af7eeec7b4859f539cd9288750c1d8f60b7907c82eefcef6711d",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+              },
+              "json": {
+                "id": "0xbffc5985db34af7eeec7b4859f539cd9288750c1d8f60b7907c82eefcef6711d",
+                "balance": "1000"
+              }
+            }
+          },
+          {
+            "address": "0x0705e6106ebd288ad88f2ee256ff6a2e1f50eca5beee1a29734e62a47696b52a",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST>"
+              },
+              "json": {
+                "id": "0x0705e6106ebd288ad88f2ee256ff6a2e1f50eca5beee1a29734e62a47696b52a",
+                "balance": "1000000"
+              }
+            }
+          }
+        ]
+      },
+      "testCoins": {
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "address": "0x0705e6106ebd288ad88f2ee256ff6a2e1f50eca5beee1a29734e62a47696b52a",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST>"
+              },
+              "json": {
+                "id": "0x0705e6106ebd288ad88f2ee256ff6a2e1f50eca5beee1a29734e62a47696b52a",
+                "balance": "1000000"
+              }
+            }
+          }
+        ]
+      },
+      "haneulCoins": {
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "address": "0x37cf3a6d7bfb547e9eaf95377bde64a81d8a954a38fcb37595663d5ab3c878c8",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+              },
+              "json": {
+                "id": "0x37cf3a6d7bfb547e9eaf95377bde64a81d8a954a38fcb37595663d5ab3c878c8",
+                "balance": "300000000000000"
+              }
+            }
+          },
+          {
+            "address": "0xbffc5985db34af7eeec7b4859f539cd9288750c1d8f60b7907c82eefcef6711d",
+            "contents": {
+              "type": {
+                "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+              },
+              "json": {
+                "id": "0xbffc5985db34af7eeec7b4859f539cd9288750c1d8f60b7907c82eefcef6711d",
+                "balance": "1000"
+              }
+            }
+          }
+        ]
+      },
+      "testBalance": {
+        "coinType": {
+          "repr": "0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST"
+        },
+        "totalBalance": "1000000"
+      },
+      "haneulBalance": {
+        "coinType": {
+          "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL"
+        },
+        "totalBalance": "300000000001000"
+      },
+      "emptyBalance": {
+        "coinType": {
+          "repr": "0x0000000000000000000000000000000000000000000000000000000000000042::empty::COIN"
+        },
+        "totalBalance": "0"
+      },
+      "multiGetBalances": [
+        {
+          "coinType": {
+            "repr": "0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST"
+          },
+          "totalBalance": "1000000"
+        },
+        {
+          "coinType": {
+            "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL"
+          },
+          "totalBalance": "300000000001000"
+        },
+        {
+          "coinType": {
+            "repr": "0x0000000000000000000000000000000000000000000000000000000000000042::empty::COIN"
+          },
+          "totalBalance": "0"
+        }
+      ],
+      "balances": {
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "coinType": {
+              "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL"
+            },
+            "totalBalance": "300000000001000"
+          },
+          {
+            "coinType": {
+              "repr": "0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST"
+            },
+            "totalBalance": "1000000"
+          }
+        ]
+      }
+    }
+  }
+}
+
+task 12, lines 163-190:
+//# run-graphql
+Response: {
+  "data": {
+    "timeTravel": {
+      "query": {
+        "address": {
+          "objects": {
+            "pageInfo": {
+              "hasNextPage": false
+            },
+            "nodes": [
+              {
+                "address": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+                "contents": {
+                  "type": {
+                    "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+                  },
+                  "json": {
+                    "id": "0xe115ae7ff9b56944fafef6fd015d510a2fd963b6d42ec8a6266409c0ea40fb36",
+                    "balance": "299999975828860"
+                  }
+                }
+              },
+              {
+                "address": "0xbffc5985db34af7eeec7b4859f539cd9288750c1d8f60b7907c82eefcef6711d",
+                "contents": {
+                  "type": {
+                    "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+                  },
+                  "json": {
+                    "id": "0xbffc5985db34af7eeec7b4859f539cd9288750c1d8f60b7907c82eefcef6711d",
+                    "balance": "1000"
+                  }
+                }
+              },
+              {
+                "address": "0x77e12fc740054c1e8eb2a50ca536da588e57782b69b0b9c1478abcfc459effe5",
+                "contents": {
+                  "type": {
+                    "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL>"
+                  },
+                  "json": {
+                    "id": "0x77e12fc740054c1e8eb2a50ca536da588e57782b69b0b9c1478abcfc459effe5",
+                    "balance": "500"
+                  }
+                }
+              },
+              {
+                "address": "0x0705e6106ebd288ad88f2ee256ff6a2e1f50eca5beee1a29734e62a47696b52a",
+                "contents": {
+                  "type": {
+                    "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST>"
+                  },
+                  "json": {
+                    "id": "0x0705e6106ebd288ad88f2ee256ff6a2e1f50eca5beee1a29734e62a47696b52a",
+                    "balance": "1000000"
+                  }
+                }
+              },
+              {
+                "address": "0xd3ecc9bbada9a805607b77f7fa2568c36485c76b79cca31cfa6ca7653cfd7c3d",
+                "contents": {
+                  "type": {
+                    "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST>"
+                  },
+                  "json": {
+                    "id": "0xd3ecc9bbada9a805607b77f7fa2568c36485c76b79cca31cfa6ca7653cfd7c3d",
+                    "balance": "500000"
+                  }
+                }
+              },
+              {
+                "address": "0x4f376d0e3919cf473fec48b9cce572a0ed93ade16194beff270d1b644bc543c6",
+                "contents": {
+                  "type": {
+                    "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST>"
+                  },
+                  "json": {
+                    "id": "0x4f376d0e3919cf473fec48b9cce572a0ed93ade16194beff270d1b644bc543c6",
+                    "balance": "250000"
+                  }
+                }
+              },
+              {
+                "address": "0xaded07562805c4c983009e1572dbeb1ec61e266472e89c90ce60678cd995fb5e",
+                "contents": {
+                  "type": {
+                    "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::coin::Coin<0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST>"
+                  },
+                  "json": {
+                    "id": "0xaded07562805c4c983009e1572dbeb1ec61e266472e89c90ce60678cd995fb5e",
+                    "balance": "100000"
+                  }
+                }
+              }
+            ]
+          },
+          "balances": {
+            "pageInfo": {
+              "hasNextPage": false
+            },
+            "nodes": [
+              {
+                "coinType": {
+                  "repr": "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL"
+                },
+                "totalBalance": "299999975830360"
+              },
+              {
+                "coinType": {
+                  "repr": "0x92429b2a76a9384fbbae957f895640e7a3a776f4b6d28296bca81a721b43e2dc::test::TEST"
+                },
+                "totalBalance": "1850000"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
