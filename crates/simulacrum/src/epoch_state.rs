@@ -1,0 +1,165 @@
+// Copyright (c) Mysten Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use std::sync::Arc;
+
+use anyhow::Result;
+use haneul_config::{
+    transaction_deny_config::TransactionDenyConfig, verifier_signing_config::VerifierSigningConfig,
+};
+use haneul_execution::Executor;
+use haneul_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
+use haneul_types::{
+    committee::{Committee, EpochId},
+    effects::TransactionEffects,
+    execution_params::ExecutionOrEarlyError,
+    gas::HaneulGasStatus,
+    inner_temporary_store::InnerTemporaryStore,
+    metrics::{BytecodeVerifierMetrics, LimitsMetrics},
+    haneul_system_state::{
+        HaneulSystemState, HaneulSystemStateTrait,
+        epoch_start_haneul_system_state::{EpochStartSystemState, EpochStartSystemStateTrait},
+    },
+    transaction::{TransactionDataAPI, VerifiedTransaction},
+};
+
+use crate::SimulatorStore;
+
+pub struct EpochState {
+    epoch_start_state: EpochStartSystemState,
+    committee: Committee,
+    protocol_config: ProtocolConfig,
+    limits_metrics: Arc<LimitsMetrics>,
+    bytecode_verifier_metrics: Arc<BytecodeVerifierMetrics>,
+    executor: Arc<dyn Executor + Send + Sync>,
+    /// A counter that advances each time we advance the clock in order to ensure that each update
+    /// txn has a unique digest. This is reset on epoch changes
+    next_consensus_round: u64,
+}
+
+impl EpochState {
+    pub fn new(system_state: HaneulSystemState) -> Self {
+        let protocol_config =
+            ProtocolConfig::get_for_version(system_state.protocol_version().into(), Chain::Unknown);
+        Self::new_with_protocol_config(system_state, protocol_config)
+    }
+
+    pub fn new_with_protocol_config(
+        system_state: HaneulSystemState,
+        protocol_config: ProtocolConfig,
+    ) -> Self {
+        let epoch_start_state = system_state.into_epoch_start_state();
+        let committee = epoch_start_state.get_haneul_committee();
+        let registry = prometheus::Registry::new();
+        let limits_metrics = Arc::new(LimitsMetrics::new(&registry));
+        let bytecode_verifier_metrics = Arc::new(BytecodeVerifierMetrics::new(&registry));
+        let executor = haneul_execution::executor(&protocol_config, true).unwrap();
+
+        Self {
+            epoch_start_state,
+            committee,
+            protocol_config,
+            limits_metrics,
+            bytecode_verifier_metrics,
+            executor,
+            next_consensus_round: 0,
+        }
+    }
+
+    pub fn epoch(&self) -> EpochId {
+        self.epoch_start_state.epoch()
+    }
+
+    pub fn reference_gas_price(&self) -> u64 {
+        self.epoch_start_state.reference_gas_price()
+    }
+
+    pub fn next_consensus_round(&mut self) -> u64 {
+        let round = self.next_consensus_round;
+        self.next_consensus_round += 1;
+        round
+    }
+
+    pub fn committee(&self) -> &Committee {
+        &self.committee
+    }
+
+    pub fn epoch_start_state(&self) -> &EpochStartSystemState {
+        &self.epoch_start_state
+    }
+
+    pub fn protocol_version(&self) -> ProtocolVersion {
+        self.protocol_config().version
+    }
+
+    pub fn protocol_config(&self) -> &ProtocolConfig {
+        &self.protocol_config
+    }
+
+    pub fn execute_transaction(
+        &self,
+        store: &dyn SimulatorStore,
+        deny_config: &TransactionDenyConfig,
+        verifier_signing_config: &VerifierSigningConfig,
+        transaction: &VerifiedTransaction,
+    ) -> Result<(
+        InnerTemporaryStore,
+        HaneulGasStatus,
+        TransactionEffects,
+        Result<(), haneul_types::error::ExecutionError>,
+    )> {
+        let tx_digest = *transaction.digest();
+        let tx_data = &transaction.data().intent_message().value;
+        let input_object_kinds = tx_data.input_objects()?;
+        let receiving_object_refs = tx_data.receiving_objects();
+
+        haneul_transaction_checks::deny::check_transaction_for_signing(
+            tx_data,
+            transaction.tx_signatures(),
+            &input_object_kinds,
+            &receiving_object_refs,
+            deny_config,
+            &store,
+        )?;
+
+        let (input_objects, receiving_objects) = store.read_objects_for_synchronous_execution(
+            &tx_digest,
+            &input_object_kinds,
+            &receiving_object_refs,
+        )?;
+
+        // Run the transaction input checks that would run when submitting the txn to a validator
+        // for signing
+        let (gas_status, checked_input_objects) = haneul_transaction_checks::check_transaction_input(
+            &self.protocol_config,
+            self.epoch_start_state.reference_gas_price(),
+            transaction.data().transaction_data(),
+            input_objects,
+            &receiving_objects,
+            &self.bytecode_verifier_metrics,
+            verifier_signing_config,
+        )?;
+
+        let transaction_data = transaction.data().transaction_data();
+        let (kind, signer, gas_data) = transaction_data.execution_parts();
+        let (inner_temp_store, gas_status, effects, _timings, result) =
+            self.executor.execute_transaction_to_effects(
+                store.backing_store(),
+                &self.protocol_config,
+                self.limits_metrics.clone(),
+                false, // enable_expensive_checks
+                // TODO: Integrate with early execution error
+                ExecutionOrEarlyError::Ok(()),
+                &self.epoch_start_state.epoch(),
+                self.epoch_start_state.epoch_start_timestamp_ms(),
+                checked_input_objects,
+                gas_data,
+                gas_status,
+                kind,
+                signer,
+                tx_digest,
+                &mut None,
+            );
+        Ok((inner_temp_store, gas_status, effects, result))
+    }
+}
