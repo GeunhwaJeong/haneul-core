@@ -1,0 +1,19 @@
+[package]
+name = "haneul-indexer-alt-metrics"
+version.workspace = true
+authors = ["Haneul Labs <build@haneul-labs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+clap.workspace = true
+prometheus.workspace = true
+prometheus-closure-metric.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+haneul-futures.workspace = true
+haneul-pg-db.workspace = true
