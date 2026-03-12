@@ -1,0 +1,74 @@
+[package]
+name = "haneul-indexer-alt-e2e-tests"
+version = "0.1.0"
+authors = ["Haneul Labs <eng@haneul-labs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[lints]
+workspace = true
+
+[[test]]
+name = "transactional_tests"
+harness = false
+
+[dependencies]
+anyhow.workspace = true
+bcs.workspace = true
+diesel = { workspace = true, features = ["chrono"] }
+diesel-async = { workspace = true, features = ["bb8", "postgres", "async-connection-wrapper"] }
+fastcrypto.workspace = true
+prost.workspace = true
+prometheus.workspace = true
+rand.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+shared-crypto.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+url.workspace = true
+zstd.workspace = true
+
+simulacrum.workspace = true
+haneul-futures.workspace = true
+haneul-indexer-alt.workspace = true
+haneul-indexer-alt-consistent-api.workspace = true
+haneul-indexer-alt-consistent-store.workspace = true
+haneul-indexer-alt-framework = { workspace = true, features = ["postgres", "cluster"] }
+haneul-indexer-alt-graphql.workspace = true
+haneul-indexer-alt-jsonrpc.workspace = true
+haneul-indexer-alt-reader.workspace = true
+haneul-indexer-alt-schema.workspace = true
+haneul-pg-db.workspace = true
+haneul-rpc.workspace = true
+haneul-storage.workspace = true
+haneul-types.workspace = true
+move-core-types.workspace = true
+haneul-move-build.workspace = true
+
+[target.'cfg(msim)'.dependencies]
+msim.workspace = true
+haneul-protocol-config.workspace = true
+haneul-simulator.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+async-trait.workspace = true
+datatest-stable.workspace = true
+insta.workspace = true
+jsonrpsee.workspace = true
+telemetry-subscribers.workspace = true
+tonic.workspace = true
+
+haneul-field-count.workspace = true
+haneul-framework.workspace = true
+haneul-json-rpc-types.workspace = true
+haneul-macros.workspace = true
+haneul-sdk.workspace = true
+haneul-swarm-config.workspace = true
+haneul-test-transaction-builder.workspace = true
+haneul-transactional-test-runner.workspace = true
+test-cluster.workspace = true
+tracing.workspace = true
