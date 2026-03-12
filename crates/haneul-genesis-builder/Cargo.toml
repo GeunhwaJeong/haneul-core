@@ -1,0 +1,39 @@
+[package]
+name = "haneul-genesis-builder"
+version = "0.0.0"
+authors = ["Haneul Labs <build@haneul-labs.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+bcs.workspace = true
+camino.workspace = true
+fastcrypto.workspace = true
+move-binary-format.workspace = true
+move-core-types.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_with.workspace = true
+serde_yaml.workspace = true
+tempfile.workspace = true
+tracing.workspace = true
+prometheus.workspace = true
+
+shared-crypto.workspace = true
+haneul-config.workspace = true
+haneul-execution.workspace = true
+haneul-framework.workspace = true
+haneul-framework-snapshot.workspace = true
+haneul-protocol-config.workspace = true
+haneul-types.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[target.'cfg(msim)'.dependencies]
+haneul-simulator.workspace = true
