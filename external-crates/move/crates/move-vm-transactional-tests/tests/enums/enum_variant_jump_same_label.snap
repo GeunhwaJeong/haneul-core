@@ -1,0 +1,88 @@
+---
+source: crates/move-transactional-test-runner/src/framework.rs
+---
+processed 5 tasks
+
+task 0, lines 1-43:
+//# print-bytecode
+// Move bytecode v7
+module 6.Enums {
+
+enum EnumWithThreeVariants<T> {
+	One {  },
+	Two { x: T },
+	Three {  }
+}
+
+public call_success<T>(t: T): T {
+L1:	x: EnumWithThreeVariants<T>
+B0:
+	0: MoveLoc[0](t: T)
+	1: PackVariantGeneric(VariantInstantiationHandleIndex(0))
+	2: StLoc[1](x: EnumWithThreeVariants<T>)
+	3: MoveLoc[1](x: EnumWithThreeVariants<T>)
+	4: Call f<T>(EnumWithThreeVariants<T>): T
+	5: Ret
+}
+
+public call_fail_1<T>(): T {
+L0:	x: EnumWithThreeVariants<T>
+B0:
+	0: PackVariantGeneric(VariantInstantiationHandleIndex(1))
+	1: StLoc[0](x: EnumWithThreeVariants<T>)
+	2: MoveLoc[0](x: EnumWithThreeVariants<T>)
+	3: Call f<T>(EnumWithThreeVariants<T>): T
+	4: Ret
+}
+
+public call_fail_3<T>(): T {
+L0:	x: EnumWithThreeVariants<T>
+B0:
+	0: PackVariantGeneric(VariantInstantiationHandleIndex(2))
+	1: StLoc[0](x: EnumWithThreeVariants<T>)
+	2: MoveLoc[0](x: EnumWithThreeVariants<T>)
+	3: Call f<T>(EnumWithThreeVariants<T>): T
+	4: Ret
+}
+
+f<T>(x: EnumWithThreeVariants<T>): T {
+L1:	y: T
+B0:
+	0: ImmBorrowLoc[0](x: EnumWithThreeVariants<T>)
+	1: VariantSwitch(VariantJumpTableIndex(0))
+B1:
+	2: MoveLoc[0](x: EnumWithThreeVariants<T>)
+	3: UnpackVariantGeneric(VariantInstantiationHandleIndex(0))
+	4: StLoc[1](y: T)
+	5: MoveLoc[1](y: T)
+	6: Ret
+Jump tables:
+[0]:	variant_switch EnumWithThreeVariants {
+		One => jump 2
+		Two => jump 2
+		Three => jump 2
+	}
+}
+
+}
+
+
+task 3, line 101:
+//# run 0x6::Enums::call_fail_1 --type-args u64
+Error: Function execution failed with VMError: {
+    major_status: VARIANT_TAG_MISMATCH,
+    sub_status: None,
+    location: 0x6::Enums,
+    indices: [],
+    offsets: [(FunctionDefinitionIndex(3), 3)],
+}
+
+task 4, line 103:
+//# run 0x6::Enums::call_fail_3 --type-args u64
+Error: Function execution failed with VMError: {
+    major_status: VARIANT_TAG_MISMATCH,
+    sub_status: None,
+    location: 0x6::Enums,
+    indices: [],
+    offsets: [(FunctionDefinitionIndex(3), 3)],
+}

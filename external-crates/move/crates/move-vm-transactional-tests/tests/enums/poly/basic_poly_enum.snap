@@ -1,0 +1,43 @@
+---
+source: crates/move-transactional-test-runner/src/framework.rs
+---
+processed 3 tasks
+
+task 0, lines 1-24:
+//# print-bytecode
+// Move bytecode v7
+module 6.MonomorphicEnums {
+
+enum EnumWithTwoVariants<T> {
+	One {  },
+	Two { x: T }
+}
+
+public f<T>(t: T): T {
+L1:	x: EnumWithTwoVariants<T>
+L2:	y: T
+B0:
+	0: MoveLoc[0](t: T)
+	1: PackVariantGeneric(VariantInstantiationHandleIndex(0))
+	2: StLoc[1](x: EnumWithTwoVariants<T>)
+	3: ImmBorrowLoc[1](x: EnumWithTwoVariants<T>)
+	4: VariantSwitch(VariantJumpTableIndex(0))
+B1:
+	5: MoveLoc[1](x: EnumWithTwoVariants<T>)
+	6: UnpackVariantGeneric(VariantInstantiationHandleIndex(1))
+	7: LdU64(0)
+	8: Abort
+B2:
+	9: MoveLoc[1](x: EnumWithTwoVariants<T>)
+	10: UnpackVariantGeneric(VariantInstantiationHandleIndex(0))
+	11: StLoc[2](y: T)
+	12: MoveLoc[2](y: T)
+	13: Ret
+Jump tables:
+[0]:	variant_switch EnumWithTwoVariants {
+		One => jump 5
+		Two => jump 9
+	}
+}
+
+}

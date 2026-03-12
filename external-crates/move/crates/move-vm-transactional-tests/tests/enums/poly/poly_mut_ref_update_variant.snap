@@ -1,0 +1,52 @@
+---
+source: crates/move-transactional-test-runner/src/framework.rs
+---
+processed 3 tasks
+
+task 0, lines 3-34:
+//# print-bytecode
+// Move bytecode v7
+module 6.PolymorphicEnums {
+
+enum EnumWithTwoVariants<T> has drop {
+	One { x: T },
+	Two { x: T, y: T }
+}
+
+public f(t: u64): EnumWithTwoVariants<u64> {
+B0:
+	0: MoveLoc[0](t: u64)
+	1: PackVariantGeneric(VariantInstantiationHandleIndex(0))
+	2: Ret
+}
+
+public mutate(e: &mut EnumWithTwoVariants<u64>, x: u64, y: u64) {
+B0:
+	0: MoveLoc[1](x: u64)
+	1: MoveLoc[2](y: u64)
+	2: PackVariantGeneric(VariantInstantiationHandleIndex(1))
+	3: MoveLoc[0](e: &mut EnumWithTwoVariants<u64>)
+	4: WriteRef
+	5: Ret
+}
+
+public is_variant_two(e: &EnumWithTwoVariants<u64>): bool {
+L1:	x: &u64
+L2:	u: &u64
+B0:
+	0: CopyLoc[0](e: &EnumWithTwoVariants<u64>)
+	1: VariantSwitch(VariantJumpTableIndex(0))
+B1:
+	2: LdFalse
+	3: Ret
+B2:
+	4: LdTrue
+	5: Ret
+Jump tables:
+[0]:	variant_switch EnumWithTwoVariants {
+		One => jump 2
+		Two => jump 4
+	}
+}
+
+}
