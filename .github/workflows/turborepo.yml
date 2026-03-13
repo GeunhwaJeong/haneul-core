@@ -1,10 +1,7 @@
 name: Turborepo CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 
 jobs:
   audit:
@@ -24,7 +21,7 @@ jobs:
   build:
     name: Lint, Build, and Test
     runs-on: ubuntu-latest
-    environment: sui-typescript-aws-kms-test-env
+    environment: haneul-typescript-aws-kms-test-env
     env:
       E2E_AWS_KMS_TEST_ENABLE: "false"
       E2E_GCP_KMS_TEST_ENABLE: "false"

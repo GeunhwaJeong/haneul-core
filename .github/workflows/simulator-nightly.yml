@@ -4,12 +4,9 @@ concurrency:
   group: ${{ github.workflow }}
 
 on:
-  schedule:
-    - cron: '0 9 * * *' # equivalent to 1am PST
-    - cron: '0 21 * * *' # equivalent to 1pm PST
   workflow_dispatch:
     inputs:
-      sui_ref:
+      haneul_ref:
         description: "Branch / commit to test"
         type: string
         required: true
@@ -26,7 +23,7 @@ on:
         default: ""
 
 env:
-  SUI_REF: "${{ github.event.inputs.sui_ref || 'main' }}"
+  HANEUL_REF: "${{ github.event.inputs.haneul_ref || 'main' }}"
   TEST_NUM: "${{ github.event.inputs.test_num || '30' }}"
 
 jobs:
@@ -50,9 +47,9 @@ jobs:
         uses: teleport-actions/auth@d48447391aa28b202c98ae3f3358097025c32511 # pin@v2.0.4
         with:
           # Specify the publically accessible address of your Teleport proxy.
-          proxy: mysten.teleport.sh:443
+          proxy: haneullabs.teleport.sh:443
           # Specify the name of the join token for your bot.
-          token: sui-simtest-token
+          token: haneul-simtest-token
           # Specify the length of time that the generated credentials should be
           # valid for. This is optional and defaults to "1h"
           certificate-ttl: 6h
@@ -64,24 +61,24 @@ jobs:
       - name: Environment clean
         run: |
           tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 echo 'teleport OK'
-          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && rm -rf ~/sui"
-          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/ && git clone git@github.com:MystenLabs/sui.git"
+          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && rm -rf ~/haneul"
+          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/ && git clone git@github.com:HaneulLabs/haneul.git"
  
       # Deleting files in tmpfs that usually fill up pretty quickly after each run. Cargo clean to free up space as well.
       - name: Tmpfs and cargo clean
         run: |  
           tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "sudo rm -rf /tmp/*"
-          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/sui && cargo clean"
+          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/haneul && cargo clean"
 
-      # Checkout out the latest sui repo
-      - name: Checkout sui repo
+      # Checkout out the latest haneul repo
+      - name: Checkout haneul repo
         run: |
-          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/sui && git fetch origin && git checkout ${{ env.SUI_REF }}"
+          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/haneul && git fetch origin && git checkout ${{ env.HANEUL_REF }}"
 
       # Setting up cargo and simtest
       - name: Install simtest
         run: |
-          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/sui && ./scripts/simtest/install.sh"
+          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/haneul && ./scripts/simtest/install.sh"
 
       - name: Set protocol config override based on trigger
         id: protocol
@@ -92,13 +89,13 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             if [[ -n "${{ github.event.inputs.protocol_config_override }}" ]]; then
               echo "Testing with protocol config override: ${{ github.event.inputs.protocol_config_override }}"
-              echo "SUI_PROTOCOL_CONFIG_CHAIN_OVERRIDE=${{ github.event.inputs.protocol_config_override }}" >> $GITHUB_ENV
+              echo "HANEUL_PROTOCOL_CONFIG_CHAIN_OVERRIDE=${{ github.event.inputs.protocol_config_override }}" >> $GITHUB_ENV
             else
               echo "Testing latest protocol config for dispatched run"
             fi
           elif [[ "${{ github.event.schedule }}" == "0 21 * * *" ]]; then
             echo "Testing mainnet protocol config"
-            echo "SUI_PROTOCOL_CONFIG_CHAIN_OVERRIDE=mainnet" >> $GITHUB_ENV
+            echo "HANEUL_PROTOCOL_CONFIG_CHAIN_OVERRIDE=mainnet" >> $GITHUB_ENV
             message="(mainnet config) "
           else
             echo "Testing latest protocol config"
@@ -109,7 +106,7 @@ jobs:
       # Run simulator tests
       - name: Run simtest
         run: |
-          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/sui && RUSTUP_MAX_RETRIES=10 CARGO_TERM_COLOR=always CARGO_INCREMENTAL=0 CARGO_NET_RETRY=10 RUST_BACKTRACE=short RUST_LOG=off NUM_CPUS=24 TEST_NUM=${{ env.TEST_NUM }} ./scripts/simtest/simtest-run.sh"
+          tsh -i ${{ steps.auth.outputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/haneul && RUSTUP_MAX_RETRIES=10 CARGO_TERM_COLOR=always CARGO_INCREMENTAL=0 CARGO_NET_RETRY=10 RUST_BACKTRACE=short RUST_LOG=off NUM_CPUS=24 TEST_NUM=${{ env.TEST_NUM }} ./scripts/simtest/simtest-run.sh"
 
       - name: Collect failing tests
         id: failures
@@ -136,11 +133,11 @@ jobs:
     steps:
     - uses: technote-space/workflow-conclusion-action@45ce8e0eb155657ab8ccf346ade734257fd196a5 # Pin v4.1.1
 
-    - name: Dispatch to sui-operations for notification
+    - name: Dispatch to haneul-operations for notification
       uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # pin@v4.0.1
       with:
         token: ${{ secrets.DOCKER_BINARY_BUILDS_DISPATCH }}
-        repository: MystenLabs/sui-operations
+        repository: HaneulLabs/haneul-operations
         event-type: simtest-failure
         client-payload: |-
           {

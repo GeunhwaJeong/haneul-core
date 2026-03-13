@@ -1,9 +1,7 @@
 name: Release Branch Monitor
 
 on:
-  push:
-    branches:
-      - 'releases/sui-v*-release'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -24,7 +22,7 @@ jobs:
           # Sort by semantic version (major.minor.patch) in descending order
           # Note: --paginate returns multiple JSON arrays, so we extract names first then combine
           latest_two=$(gh api repos/${{ github.repository }}/branches --paginate \
-            --jq '.[] | select(.name | test("^releases/sui-v[0-9]+\\.[0-9]+\\.[0-9]+-release$")) | .name' \
+            --jq '.[] | select(.name | test("^releases/haneul-v[0-9]+\\.[0-9]+\\.[0-9]+-release$")) | .name' \
             | jq -Rs 'split("\n") | map(select(length > 0))
                   | map({name: ., version: (. | capture("v(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<patch>[0-9]+)") | (.major | tonumber) * 10000 + (.minor | tonumber) * 100 + (.patch | tonumber))})
                   | sort_by(.version)
@@ -67,11 +65,11 @@ jobs:
             echo "pr_url=" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Dispatch to sui-operations for notification
+      - name: Dispatch to haneul-operations for notification
         if: steps.check-branch.outputs.should_notify == 'true'
         uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # pin@v4.0.1
         with:
-          repository: MystenLabs/sui-operations
+          repository: HaneulLabs/haneul-operations
           token: ${{ secrets.DOCKER_BINARY_BUILDS_DISPATCH }}
           event-type: release-branch-push
           client-payload: |-

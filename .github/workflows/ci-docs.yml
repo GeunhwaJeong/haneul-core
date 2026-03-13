@@ -1,13 +1,6 @@
 name: Docs
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "**.rs"
-      - "Cargo.toml"
-      - "Cargo.lock"
   workflow_dispatch:
 
 jobs:
@@ -22,7 +15,7 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Generate documentation
-        run: cargo doc --workspace --exclude "sui-benchmark" --no-deps
+        run: cargo doc --workspace --exclude "haneul-benchmark" --no-deps
 
       - name: Deploy documentation
         uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # pin@v4.0.0
