@@ -90,7 +90,7 @@ Nitro Attestation Document defined for AWS.
 <code><a href="../haneul/nitro_attestation.md#haneul_nitro_attestation_module_id">module_id</a>: vector&lt;u8&gt;</code>
 </dt>
 <dd>
- Ishaneulng Nitro hypervisor module ID.
+ Issuing Nitro hypervisor module ID.
 </dd>
 <dt>
 <code><a href="../haneul/nitro_attestation.md#haneul_nitro_attestation_timestamp">timestamp</a>: u64</code>

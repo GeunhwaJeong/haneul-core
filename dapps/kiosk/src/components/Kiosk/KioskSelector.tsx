@@ -1,7 +1,7 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Listbox, Transition } from '@headleshaneul/react';
+import { Listbox, Transition } from '@headlessui/react';
 import { KioskOwnerCap } from '@haneullabs/kiosk';
 import { formatAddress } from '@haneullabs/haneul/utils';
 import classNames from 'clsx';

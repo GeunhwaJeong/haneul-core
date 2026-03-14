@@ -12,7 +12,7 @@ extend-ignore-re = [
 groth = "groth"
 # Token Generation Event - valid crypto/blockchain acronym
 TGE = "TGE"
-# Transfer-to-Object - valid Sui protocol acronym
+# Transfer-to-Object - valid Haneul protocol acronym
 TTO = "TTO"
 
 [files]

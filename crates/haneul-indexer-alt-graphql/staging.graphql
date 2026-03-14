@@ -22,7 +22,7 @@ type ActiveJwk {
 	"""
 	epoch: Epoch
 	"""
-	The string (Ishaneulng Authority) that identifies the OIDC provider.
+	The string (Issuing Authority) that identifies the OIDC provider.
 	"""
 	iss: String
 	"""

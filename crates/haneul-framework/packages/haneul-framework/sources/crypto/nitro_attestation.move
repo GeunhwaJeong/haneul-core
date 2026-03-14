@@ -26,7 +26,7 @@ public struct PCREntry has drop {
 
 /// Nitro Attestation Document defined for AWS.
 public struct NitroAttestationDocument has drop {
-    /// Ishaneulng Nitro hypervisor module ID.
+    /// Issuing Nitro hypervisor module ID.
     module_id: vector<u8>,
     /// UTC time when document was created, in milliseconds since UNIX epoch.
     timestamp: u64,

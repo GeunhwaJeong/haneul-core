@@ -45,7 +45,7 @@ runs:
           - 'consensus/**'
           - 'crates/**'
           - 'external-crates/**'
-          - 'sui-execution/**'
+          - 'haneul-execution/**'
           - '.github/workflows/cargo-llvm-cov.yml'
           - '.github/workflows/rust.yml'
           - '.github/workflows/external.yml'
@@ -62,13 +62,13 @@ runs:
           - 'doc/**'
           - '*.md'  
         isMove:
-          - 'crates/sui-framework/**'
-          - 'crates/sui-framework-build/**'
-          - 'crates/sui-framework-tests/**'
-          - 'crates/sui_move/**'
+          - 'crates/haneul-framework/**'
+          - 'crates/haneul-framework-build/**'
+          - 'crates/haneul-framework-tests/**'
+          - 'crates/haneul_move/**'
           - 'Cargo.toml'
           - 'examples/**'
-          - 'sui_programmability/**'
+          - 'haneul_programmability/**'
         isSolidity:
           - 'bridge/evm/**'
         isReleaseNotesEligible:
@@ -80,7 +80,7 @@ runs:
           - 'external-crates/**'
           - 'kiosk/**'
           - 'nre/**'
-          - 'sui-execution/**'
+          - 'haneul-execution/**'
         isMoveAutoFormatter:
           - 'external-crates/move/crates/move-analyzer/prettier-plugin/**'
         isMoveAnalyzerTraceAdapter:

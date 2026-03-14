@@ -32,7 +32,7 @@ pub(crate) type CActiveJwk = JsonCursor<usize>;
 
 #[Object]
 impl ActiveJwk {
-    /// The string (Ishaneulng Authority) that identifies the OIDC provider.
+    /// The string (Issuing Authority) that identifies the OIDC provider.
     async fn iss(&self) -> Option<String> {
         Some(self.native.jwk_id.iss.clone())
     }

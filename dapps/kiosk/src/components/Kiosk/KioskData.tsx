@@ -1,7 +1,7 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Tab } from '@headleshaneul/react';
+import { Tab } from '@headlessui/react';
 import { useCurrentAccount } from '@haneullabs/dapp-kit';
 import { formatAddress } from '@haneullabs/haneul/utils';
 import { useQueryClient } from '@tanstack/react-query';
