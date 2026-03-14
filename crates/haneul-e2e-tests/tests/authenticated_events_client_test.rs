@@ -2,9 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use futures::StreamExt;
-use move_core_types::identifier::Identifier;
-use std::sync::Arc;
-use std::time::Duration;
 use haneul_keys::keystore::AccountKeystore;
 use haneul_light_client::authenticated_events::AuthenticatedEventsClient;
 use haneul_macros::sim_test;
@@ -14,10 +11,13 @@ use haneul_rpc::field::FieldMaskUtil;
 use haneul_rpc_api::proto::haneul::rpc::v2::GetEpochRequest;
 use haneul_rpc_api::proto::haneul::rpc::v2::ledger_service_client::LedgerServiceClient;
 use haneul_sdk_types::ValidatorCommittee;
-use haneul_types::base_types::{ObjectID, HaneulAddress};
+use haneul_types::base_types::{HaneulAddress, ObjectID};
 use haneul_types::committee::Committee;
 use haneul_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use haneul_types::transaction::TransactionData;
+use move_core_types::identifier::Identifier;
+use std::sync::Arc;
+use std::time::Duration;
 use test_cluster::{TestCluster, TestClusterBuilder};
 
 fn create_rpc_config_with_authenticated_events() -> haneul_config::RpcConfig {

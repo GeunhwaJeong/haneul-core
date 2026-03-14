@@ -6,17 +6,8 @@ use fastcrypto_zkp::bn254::zk_login::JwkId;
 use fastcrypto_zkp::bn254::zk_login::{JWK, OIDCProvider};
 use fastcrypto_zkp::bn254::zk_login_api::ZkLoginEnv;
 use futures::pin_mut;
-use im::hashmap::HashMap as ImHashMap;
-use itertools::{Itertools as _, izip};
-use haneullabs_common::debug_fatal;
-use haneullabs_metrics::monitored_scope;
-use nonempty::NonEmpty;
-use parking_lot::{Mutex, MutexGuard, RwLock};
-use prometheus::{IntCounter, Registry, register_int_counter_with_registry};
-use shared_crypto::intent::Intent;
-use std::sync::Arc;
 use haneul_types::address_alias;
-use haneul_types::base_types::{SequenceNumber, HaneulAddress};
+use haneul_types::base_types::{HaneulAddress, SequenceNumber};
 use haneul_types::digests::SenderSignedDataDigest;
 use haneul_types::digests::ZKLoginInputsDigest;
 use haneul_types::signature_verification::{
@@ -34,6 +25,15 @@ use haneul_types::{
     signature::VerifyParams,
     transaction::{CertifiedTransaction, VerifiedCertificate},
 };
+use haneullabs_common::debug_fatal;
+use haneullabs_metrics::monitored_scope;
+use im::hashmap::HashMap as ImHashMap;
+use itertools::{Itertools as _, izip};
+use nonempty::NonEmpty;
+use parking_lot::{Mutex, MutexGuard, RwLock};
+use prometheus::{IntCounter, Registry, register_int_counter_with_registry};
+use shared_crypto::intent::Intent;
+use std::sync::Arc;
 use tap::TapFallible;
 use tokio::runtime::Handle;
 use tokio::{
@@ -247,7 +247,10 @@ impl SignatureVerifier {
     }
 
     /// Verifies one cert asynchronously, in a batch.
-    pub async fn verify_cert(&self, cert: CertifiedTransaction) -> HaneulResult<VerifiedCertificate> {
+    pub async fn verify_cert(
+        &self,
+        cert: CertifiedTransaction,
+    ) -> HaneulResult<VerifiedCertificate> {
         let cert_digest = cert.certificate_digest();
         if self.certificate_cache.is_cached(&cert_digest) {
             return Ok(VerifiedCertificate::new_unchecked(cert));
@@ -679,13 +682,15 @@ fn batch_verify(
     let mut obligation = VerificationObligation::default();
 
     for cert in certs {
-        let idx = obligation.add_message(cert.data(), cert.epoch(), Intent::haneul_app(cert.scope()));
+        let idx =
+            obligation.add_message(cert.data(), cert.epoch(), Intent::haneul_app(cert.scope()));
         cert.auth_sig()
             .add_to_verification_obligation(committee, &mut obligation, idx)?;
     }
 
     for ckpt in checkpoints {
-        let idx = obligation.add_message(ckpt.data(), ckpt.epoch(), Intent::haneul_app(ckpt.scope()));
+        let idx =
+            obligation.add_message(ckpt.data(), ckpt.epoch(), Intent::haneul_app(ckpt.scope()));
         ckpt.auth_sig()
             .add_to_verification_obligation(committee, &mut obligation, idx)?;
     }

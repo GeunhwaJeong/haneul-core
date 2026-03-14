@@ -10,6 +10,8 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
+use haneul_config::HANEUL_CLIENT_CONFIG;
+use haneul_sdk::wallet_context::WalletContext;
 use http::Method;
 use std::{
     borrow::Cow,
@@ -18,8 +20,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use haneul_config::HANEUL_CLIENT_CONFIG;
-use haneul_sdk::wallet_context::WalletContext;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
@@ -139,8 +139,8 @@ pub async fn start_faucet(app_state: Arc<AppState>) -> Result<(), anyhow::Error>
 mod tests {
     use super::*;
     use crate::LocalFaucet;
-    use serde_json::json;
     use haneul_sdk::types::base_types::HaneulAddress;
+    use serde_json::json;
     use test_cluster::TestClusterBuilder;
 
     #[tokio::test]

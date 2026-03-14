@@ -3,8 +3,8 @@
 
 use std::collections::BTreeMap;
 
-use move_core_types::language_storage::TypeTag;
 use haneul_protocol_config::ProtocolConfig;
+use move_core_types::language_storage::TypeTag;
 
 use crate::{
     accumulator_root::AccumulatorValue,

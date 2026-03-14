@@ -2,31 +2,33 @@
 // // SPDX-License-Identifier: Apache-2.0
 
 use expect_test::expect;
-use move_core_types::account_address::AccountAddress;
-use std::collections::HashMap;
-use std::{fs, io, path::Path};
-use std::{path::PathBuf, str};
 use haneul_move_build::{BuildConfig, CompiledPackage};
 use haneul_sdk::wallet_context::WalletContext;
-use haneul_test_transaction_builder::{make_publish_transaction, make_publish_transaction_with_deps};
+use haneul_test_transaction_builder::{
+    make_publish_transaction, make_publish_transaction_with_deps,
+};
 use haneul_types::base_types::ObjectID;
 use haneul_types::move_package::UpgradePolicy;
 use haneul_types::transaction::TEST_ONLY_GAS_UNIT_FOR_PUBLISH;
 use haneul_types::{
     HANEUL_SYSTEM_STATE_OBJECT_ID,
-    base_types::{ObjectRef, HaneulAddress, TransactionDigest},
+    base_types::{HaneulAddress, ObjectRef, TransactionDigest},
 };
+use move_core_types::account_address::AccountAddress;
+use std::collections::HashMap;
+use std::{fs, io, path::Path};
+use std::{path::PathBuf, str};
 use test_cluster::TestClusterBuilder;
 
 use crate::toolchain::CURRENT_COMPILER_VERSION;
 use crate::{BytecodeSourceVerifier, ValidationMode};
+use haneul_package_alt::{BuildParams, HaneulFlavor, PublishedMetadata};
+use haneul_types::digests::get_testnet_chain_identifier;
+use haneul_types::supported_protocol_versions::Chain;
 use move_package_alt::{
     PackageLoader, RootPackage,
     schema::{Environment, OriginalID, PublishAddresses, PublishedID},
 };
-use haneul_package_alt::{BuildParams, PublishedMetadata, HaneulFlavor};
-use haneul_types::digests::get_testnet_chain_identifier;
-use haneul_types::supported_protocol_versions::Chain;
 
 #[tokio::test]
 async fn successful_verification() -> anyhow::Result<()> {
@@ -180,7 +182,8 @@ async fn successful_verification_upgrades() -> anyhow::Result<()> {
     let b_v2_fixtures = tempfile::tempdir()?;
     let b_v2 = {
         let b_src =
-            copy_upgraded_package(&b_v2_fixtures, "b-v2", b_v1.0.into(), HaneulAddress::ZERO).await?;
+            copy_upgraded_package(&b_v2_fixtures, "b-v2", b_v1.0.into(), HaneulAddress::ZERO)
+                .await?;
         upgrade_package(context, b_v1.0, b_cap.0, b_src).await
     };
 
@@ -588,7 +591,8 @@ async fn linkage_differs() -> anyhow::Result<()> {
     let b_v2_fixtures = tempfile::tempdir()?;
     let b_v2 = {
         let b_src =
-            copy_upgraded_package(&b_v2_fixtures, "b-v2", b_v1.0.into(), HaneulAddress::ZERO).await?;
+            copy_upgraded_package(&b_v2_fixtures, "b-v2", b_v1.0.into(), HaneulAddress::ZERO)
+                .await?;
         upgrade_package(context, b_v1.0, b_cap.0, b_src).await
     };
 
@@ -597,7 +601,8 @@ async fn linkage_differs() -> anyhow::Result<()> {
     let b_v3_fixtures = tempfile::tempdir()?;
     let b_v3 = {
         let b_src =
-            copy_upgraded_package(&b_v3_fixtures, "b-v2", b_v2.0.into(), HaneulAddress::ZERO).await?;
+            copy_upgraded_package(&b_v3_fixtures, "b-v2", b_v2.0.into(), HaneulAddress::ZERO)
+                .await?;
         upgrade_package(context, b_v2.0, b_cap.0, b_src).await
     };
 
@@ -763,7 +768,8 @@ async fn successful_verification_with_bytecode_dep() -> anyhow::Result<()> {
         // publish b
         fs::create_dir_all(tempdir.path().join("publish"))?;
         let b_src =
-            copy_published_package(&tempdir.path().join("publish"), "b", HaneulAddress::ZERO).await?;
+            copy_published_package(&tempdir.path().join("publish"), "b", HaneulAddress::ZERO)
+                .await?;
         let b_ref = publish_package(context, b_src).await.0;
 
         // setup b as a bytecode package

@@ -18,12 +18,23 @@ use futures::FutureExt;
 use futures::future::{self, Either, select};
 use futures::stream::FuturesUnordered;
 use futures::{StreamExt, pin_mut};
-use itertools::Itertools;
+use haneul_protocol_config::ProtocolConfig;
+use haneul_simulator::anemo::PeerId;
+use haneul_types::base_types::AuthorityName;
+use haneul_types::base_types::TransactionDigest;
+use haneul_types::committee::Committee;
+use haneul_types::error::{HaneulErrorKind, HaneulResult};
+use haneul_types::fp_ensure;
+use haneul_types::messages_consensus::ConsensusPosition;
+use haneul_types::messages_consensus::ConsensusTransactionKind;
+use haneul_types::messages_consensus::{ConsensusTransaction, ConsensusTransactionKey};
+use haneul_types::transaction::TransactionDataAPI;
 use haneullabs_common::debug_fatal;
 use haneullabs_metrics::{
     GaugeGuard, InflightGuardFutureExt, LATENCY_SEC_BUCKETS, spawn_monitored_task,
 };
 use haneullabs_network::anemo_connection_monitor::ConnectionStatus;
+use itertools::Itertools;
 use parking_lot::RwLockReadGuard;
 use prometheus::Histogram;
 use prometheus::HistogramVec;
@@ -36,17 +47,6 @@ use prometheus::{
     register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
     register_int_gauge_with_registry,
 };
-use haneul_protocol_config::ProtocolConfig;
-use haneul_simulator::anemo::PeerId;
-use haneul_types::base_types::AuthorityName;
-use haneul_types::base_types::TransactionDigest;
-use haneul_types::committee::Committee;
-use haneul_types::error::{HaneulErrorKind, HaneulResult};
-use haneul_types::fp_ensure;
-use haneul_types::messages_consensus::ConsensusPosition;
-use haneul_types::messages_consensus::ConsensusTransactionKind;
-use haneul_types::messages_consensus::{ConsensusTransaction, ConsensusTransactionKey};
-use haneul_types::transaction::TransactionDataAPI;
 use tokio::sync::{Semaphore, SemaphorePermit, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
@@ -1497,15 +1497,15 @@ mod adapter_tests {
     };
     use crate::mysticeti_adapter::LazyMysticetiClient;
     use fastcrypto::traits::KeyPair;
-    use rand::Rng;
-    use rand::{SeedableRng, rngs::StdRng};
-    use std::sync::Arc;
-    use std::time::Duration;
     use haneul_types::{
         base_types::TransactionDigest,
         committee::Committee,
         crypto::{AuthorityKeyPair, AuthorityPublicKeyBytes, get_key_pair_from_rng},
     };
+    use rand::Rng;
+    use rand::{SeedableRng, rngs::StdRng};
+    use std::sync::Arc;
+    use std::time::Duration;
 
     fn test_committee(rng: &mut StdRng, size: usize) -> Committee {
         let authorities = (0..size)

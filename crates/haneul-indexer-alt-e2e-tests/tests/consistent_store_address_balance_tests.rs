@@ -13,11 +13,11 @@ use haneul_test_transaction_builder::FundSource;
 use haneul_test_transaction_builder::TestTransactionBuilder;
 use haneul_types::Identifier;
 use haneul_types::TypeTag;
+use haneul_types::base_types::HaneulAddress;
 use haneul_types::base_types::ObjectDigest;
 use haneul_types::base_types::ObjectID;
 use haneul_types::base_types::ObjectRef;
 use haneul_types::base_types::SequenceNumber;
-use haneul_types::base_types::HaneulAddress;
 use haneul_types::crypto::AccountKeyPair;
 use haneul_types::crypto::get_account_key_pair;
 use haneul_types::effects::TransactionEffectsAPI;
@@ -819,7 +819,10 @@ impl BalanceCluster {
         let tx =
             TestTransactionBuilder::new(self.publisher, gas, self.cluster.reference_gas_price())
                 .with_gas_budget(DEFAULT_GAS_BUDGET)
-                .transfer_haneul_to_address_balance(FundSource::coin(gas), vec![(amount, recipient)])
+                .transfer_haneul_to_address_balance(
+                    FundSource::coin(gas),
+                    vec![(amount, recipient)],
+                )
                 .build();
 
         run_tx_and_return_gas(&mut self.cluster, tx, &self.pkp);
@@ -1010,9 +1013,10 @@ impl BalanceCluster {
         });
 
         if let Some(checkpoint) = checkpoint {
-            request
-                .metadata_mut()
-                .insert("x-haneul-checkpoint", checkpoint.to_string().parse().unwrap());
+            request.metadata_mut().insert(
+                "x-haneul-checkpoint",
+                checkpoint.to_string().parse().unwrap(),
+            );
         }
 
         let response = self.client.list_balances(request).await?.into_inner();
@@ -1048,9 +1052,10 @@ impl BalanceCluster {
         });
 
         if let Some(checkpoint) = checkpoint {
-            request
-                .metadata_mut()
-                .insert("x-haneul-checkpoint", checkpoint.to_string().parse().unwrap());
+            request.metadata_mut().insert(
+                "x-haneul-checkpoint",
+                checkpoint.to_string().parse().unwrap(),
+            );
         }
 
         let response = self.client.get_balance(request).await?.into_inner();
@@ -1080,9 +1085,10 @@ impl BalanceCluster {
         });
 
         if let Some(checkpoint) = checkpoint {
-            request
-                .metadata_mut()
-                .insert("x-haneul-checkpoint", checkpoint.to_string().parse().unwrap());
+            request.metadata_mut().insert(
+                "x-haneul-checkpoint",
+                checkpoint.to_string().parse().unwrap(),
+            );
         }
 
         Ok(self

@@ -15,9 +15,9 @@ use haneul_types::base_types::HaneulAddress as NativeHaneulAddress;
 use haneul_types::dynamic_field::DynamicFieldType;
 
 use crate::api::scalars::domain::Domain;
+use crate::api::scalars::haneul_address::HaneulAddress;
 use crate::api::scalars::id::Id;
 use crate::api::scalars::owner_kind::OwnerKind;
-use crate::api::scalars::haneul_address::HaneulAddress;
 use crate::api::scalars::type_filter::TypeInput;
 use crate::api::scalars::uint53::UInt53;
 use crate::api::types::balance;

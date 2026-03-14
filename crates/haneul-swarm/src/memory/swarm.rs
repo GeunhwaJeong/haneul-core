@@ -4,6 +4,7 @@
 use super::Node;
 use anyhow::Result;
 use futures::future::try_join_all;
+use haneul_types::traffic_control::{PolicyConfig, RemoteFirewallConfig};
 use rand::rngs::OsRng;
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -13,7 +14,6 @@ use std::{
     ops,
     path::{Path, PathBuf},
 };
-use haneul_types::traffic_control::{PolicyConfig, RemoteFirewallConfig};
 
 #[cfg(msim)]
 use haneul_config::node::ExecutionTimeObserverConfig;
@@ -224,7 +224,10 @@ impl<R> SwarmBuilder<R> {
         self
     }
 
-    pub fn with_fullnode_rpc_config(mut self, fullnode_rpc_config: haneul_config::RpcConfig) -> Self {
+    pub fn with_fullnode_rpc_config(
+        mut self,
+        fullnode_rpc_config: haneul_config::RpcConfig,
+    ) -> Self {
         self.fullnode_rpc_config = Some(fullnode_rpc_config);
         self
     }

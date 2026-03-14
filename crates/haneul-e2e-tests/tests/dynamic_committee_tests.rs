@@ -3,26 +3,20 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use move_core_types::ident_str;
-use rand::{Rng, SeedableRng, rngs::StdRng};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
 use haneul_core::authority::AuthorityState;
 use haneul_macros::*;
 use haneul_swarm_config::genesis_config::{AccountConfig, DEFAULT_GAS_AMOUNT};
 use haneul_types::{
     HANEUL_SYSTEM_PACKAGE_ID,
-    base_types::{ObjectDigest, ObjectID, ObjectRef, HaneulAddress},
+    base_types::{HaneulAddress, ObjectDigest, ObjectID, ObjectRef},
     governance::StakedHaneul,
-    object::{Object, Owner},
-    programmable_transaction_builder::ProgrammableTransactionBuilder,
-    storage::ObjectStore,
     haneul_system_state::{
         HaneulSystemStateTrait,
         haneul_system_state_summary::{HaneulSystemStateSummary, HaneulValidatorSummary},
     },
+    object::{Object, Owner},
+    programmable_transaction_builder::ProgrammableTransactionBuilder,
+    storage::ObjectStore,
     transaction::{
         Argument, Command, ObjectArg, ProgrammableTransaction,
         TEST_ONLY_GAS_UNIT_FOR_HEAVY_COMPUTATION_STORAGE, TransactionData,
@@ -31,6 +25,12 @@ use haneul_types::{
 use haneul_types::{
     base_types::SequenceNumber,
     effects::{TransactionEffects, TransactionEffectsAPI},
+};
+use move_core_types::ident_str;
+use rand::{Rng, SeedableRng, rngs::StdRng};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
 };
 use test_cluster::{TestCluster, TestClusterBuilder};
 use tracing::info;
@@ -135,7 +135,11 @@ impl StressTestRunner {
             .clone()
     }
 
-    pub async fn run(&self, sender: HaneulAddress, pt: ProgrammableTransaction) -> TransactionEffects {
+    pub async fn run(
+        &self,
+        sender: HaneulAddress,
+        pt: ProgrammableTransaction,
+    ) -> TransactionEffects {
         let rgp = self.test_cluster.get_reference_gas_price().await;
         let gas_object = self
             .test_cluster
@@ -341,8 +345,8 @@ mod add_stake {
                 let mut layout_resolver = epoch_store
                     .executor()
                     .type_layout_resolver(Box::new(cache.as_ref()));
-                let staked_amount =
-                    object.get_total_haneul(layout_resolver.as_mut()).unwrap() - object.storage_rebate;
+                let staked_amount = object.get_total_haneul(layout_resolver.as_mut()).unwrap()
+                    - object.storage_rebate;
                 assert_eq!(staked_amount, self.stake_amount);
             };
 
@@ -491,8 +495,9 @@ async fn fuzz_dynamic_committee() {
     //  have to calculate remainder voting power and redistribute it to the remaining validators.
     active_validators.iter().for_each(|v| {
         assert!(v.voting_power <= 1_000); // limitation
-        let calculated_power =
-            ((v.staking_pool_haneul_balance as u128 * 10_000) / total_stake as u128).min(1_000) as u64;
+        let calculated_power = ((v.staking_pool_haneul_balance as u128 * 10_000)
+            / total_stake as u128)
+            .min(1_000) as u64;
         assert!(v.voting_power.abs_diff(calculated_power) < 2); // rounding error correction
     });
 

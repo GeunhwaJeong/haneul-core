@@ -5,9 +5,6 @@ use anyhow::Context as _;
 use diesel::ExpressionMethods;
 use diesel::QueryDsl;
 
-use jsonrpsee::core::RpcResult;
-use jsonrpsee::http_client::HttpClient;
-use jsonrpsee::proc_macros::rpc;
 use haneul_indexer_alt_schema::schema::kv_epoch_starts;
 use haneul_json_rpc_api::GovernanceReadApiClient;
 use haneul_json_rpc_types::DelegatedStake;
@@ -16,8 +13,8 @@ use haneul_open_rpc::Module;
 use haneul_open_rpc_macros::open_rpc;
 use haneul_types::HANEUL_SYSTEM_STATE_OBJECT_ID;
 use haneul_types::TypeTag;
-use haneul_types::base_types::ObjectID;
 use haneul_types::base_types::HaneulAddress;
+use haneul_types::base_types::ObjectID;
 use haneul_types::dynamic_field::Field;
 use haneul_types::dynamic_field::derive_dynamic_field_id;
 use haneul_types::haneul_serde::BigInt;
@@ -26,6 +23,9 @@ use haneul_types::haneul_system_state::HaneulSystemStateWrapper;
 use haneul_types::haneul_system_state::haneul_system_state_inner_v1::HaneulSystemStateInnerV1;
 use haneul_types::haneul_system_state::haneul_system_state_inner_v2::HaneulSystemStateInnerV2;
 use haneul_types::haneul_system_state::haneul_system_state_summary::HaneulSystemStateSummary;
+use jsonrpsee::core::RpcResult;
+use jsonrpsee::http_client::HttpClient;
+use jsonrpsee::proc_macros::rpc;
 
 use crate::api::rpc_module::RpcModule;
 use crate::context::Context;
@@ -164,9 +164,10 @@ async fn rgp_response(ctx: &Context) -> Result<BigInt<u64>, RpcError> {
 async fn latest_haneul_system_state_response(
     ctx: &Context,
 ) -> Result<HaneulSystemStateSummary, RpcError> {
-    let wrapper: HaneulSystemStateWrapper = load_live_deserialized(ctx, HANEUL_SYSTEM_STATE_OBJECT_ID)
-        .await
-        .context("Failed to fetch system state wrapper object")?;
+    let wrapper: HaneulSystemStateWrapper =
+        load_live_deserialized(ctx, HANEUL_SYSTEM_STATE_OBJECT_ID)
+            .await
+            .context("Failed to fetch system state wrapper object")?;
 
     let inner_id = derive_dynamic_field_id(
         HANEUL_SYSTEM_STATE_OBJECT_ID,

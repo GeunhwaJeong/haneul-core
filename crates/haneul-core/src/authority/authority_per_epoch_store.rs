@@ -17,23 +17,12 @@ use fastcrypto_zkp::bn254::zk_login::{JWK, JwkId, OIDCProvider};
 use fastcrypto_zkp::bn254::zk_login_api::ZkLoginEnv;
 use futures::FutureExt;
 use futures::future::{Either, join_all, select};
-use itertools::{Itertools, izip};
-use moka::sync::SegmentedCache as MokaCache;
-use move_bytecode_utils::module_cache::SyncModuleCache;
-use haneullabs_common::assert_reachable;
-use haneullabs_common::random_util::randomize_cache_capacity_in_tests;
-use haneullabs_common::sync::notify_once::NotifyOnce;
-use haneullabs_common::sync::notify_read::NotifyRead;
-use haneullabs_common::{debug_fatal, fatal};
-use haneullabs_metrics::monitored_scope;
-use nonempty::NonEmpty;
-use parking_lot::RwLock;
-use parking_lot::{Mutex, RwLockReadGuard, RwLockWriteGuard};
-use serde::{Deserialize, Serialize};
 use haneul_config::node::ExpensiveSafetyCheckConfig;
 use haneul_execution::{self, Executor};
 use haneul_macros::fail_point;
-use haneul_protocol_config::{Chain, PerObjectCongestionControlMode, ProtocolConfig, ProtocolVersion};
+use haneul_protocol_config::{
+    Chain, PerObjectCongestionControlMode, ProtocolConfig, ProtocolVersion,
+};
 use haneul_storage::mutex_table::{MutexGuard, MutexTable};
 use haneul_types::authenticator_state::{ActiveJwk, get_authenticator_state};
 use haneul_types::base_types::{
@@ -54,6 +43,10 @@ use haneul_types::executable_transaction::{
 };
 use haneul_types::execution::{ExecutionTimeObservationKey, ExecutionTiming};
 use haneul_types::global_state_hash::GlobalStateHash;
+use haneul_types::haneul_system_state::epoch_start_haneul_system_state::{
+    EpochStartSystemState, EpochStartSystemStateTrait,
+};
+use haneul_types::haneul_system_state::{self, HaneulSystemState};
 use haneul_types::message_envelope::TrustedEnvelope;
 use haneul_types::messages_checkpoint::{
     CheckpointContents, CheckpointSequenceNumber, CheckpointSummary,
@@ -65,16 +58,25 @@ use haneul_types::messages_consensus::{
 };
 use haneul_types::signature::GenericSignature;
 use haneul_types::storage::{BackingPackageStore, InputKey, ObjectStore};
-use haneul_types::haneul_system_state::epoch_start_haneul_system_state::{
-    EpochStartSystemState, EpochStartSystemStateTrait,
-};
-use haneul_types::haneul_system_state::{self, HaneulSystemState};
 use haneul_types::transaction::{
     AuthenticatorStateUpdate, CertifiedTransaction, DeprecatedWithAliases, InputObjectKind,
     ProgrammableTransaction, SenderSignedData, StoredExecutionTimeObservations, Transaction,
     TransactionData, TransactionDataAPI, TransactionKey, TransactionKind, TxValidityCheckContext,
     VerifiedSignedTransaction, VerifiedTransaction, VerifiedTransactionWithAliases, WithAliases,
 };
+use haneullabs_common::assert_reachable;
+use haneullabs_common::random_util::randomize_cache_capacity_in_tests;
+use haneullabs_common::sync::notify_once::NotifyOnce;
+use haneullabs_common::sync::notify_read::NotifyRead;
+use haneullabs_common::{debug_fatal, fatal};
+use haneullabs_metrics::monitored_scope;
+use itertools::{Itertools, izip};
+use moka::sync::SegmentedCache as MokaCache;
+use move_bytecode_utils::module_cache::SyncModuleCache;
+use nonempty::NonEmpty;
+use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLockReadGuard, RwLockWriteGuard};
+use serde::{Deserialize, Serialize};
 use tap::TapOptional;
 use tokio::sync::{OnceCell, mpsc, oneshot};
 use tokio::time::Instant;
@@ -927,7 +929,9 @@ impl AuthorityEpochTables {
         Ok(state)
     }
 
-    pub fn get_all_pending_consensus_transactions(&self) -> HaneulResult<Vec<ConsensusTransaction>> {
+    pub fn get_all_pending_consensus_transactions(
+        &self,
+    ) -> HaneulResult<Vec<ConsensusTransaction>> {
         Ok(self
             .pending_consensus_transactions
             .safe_iter()
@@ -1752,8 +1756,8 @@ impl AuthorityPerEpochStore {
         }
 
         // Load stored execution time observations from the HaneulSystemState object.
-        let system_state =
-            haneul_system_state::get_haneul_system_state(object_store).expect("System state must exist");
+        let system_state = haneul_system_state::get_haneul_system_state(object_store)
+            .expect("System state must exist");
         let system_state = match system_state {
             HaneulSystemState::V2(system_state) => system_state,
             HaneulSystemState::V1(_) => {
@@ -1883,7 +1887,10 @@ impl AuthorityPerEpochStore {
         Ok(())
     }
 
-    pub fn insert_signed_transaction(&self, transaction: VerifiedSignedTransaction) -> HaneulResult {
+    pub fn insert_signed_transaction(
+        &self,
+        transaction: VerifiedSignedTransaction,
+    ) -> HaneulResult {
         Ok(self
             .tables()?
             .signed_transactions
@@ -1971,7 +1978,10 @@ impl AuthorityPerEpochStore {
         self.executed_digests_notify_read.notify(&key, &digest);
     }
 
-    pub fn tx_key_to_digest(&self, key: &TransactionKey) -> HaneulResult<Option<TransactionDigest>> {
+    pub fn tx_key_to_digest(
+        &self,
+        key: &TransactionKey,
+    ) -> HaneulResult<Option<TransactionDigest>> {
         let tables = self.tables()?;
         if let TransactionKey::Digest(digest) = key {
             Ok(Some(*digest))
@@ -3903,7 +3913,11 @@ impl AuthorityPerEpochStore {
         }
     }
 
-    pub(crate) fn set_rejection_vote_reason(&self, position: ConsensusPosition, reason: &HaneulError) {
+    pub(crate) fn set_rejection_vote_reason(
+        &self,
+        position: ConsensusPosition,
+        reason: &HaneulError,
+    ) {
         if let Some(tx_reject_reason_cache) = self.tx_reject_reason_cache.as_ref() {
             tx_reject_reason_cache.set_rejection_vote_reason(position, reason);
         }

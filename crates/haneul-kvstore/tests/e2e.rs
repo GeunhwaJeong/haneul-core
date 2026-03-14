@@ -19,7 +19,6 @@ use anyhow::Result;
 use anyhow::bail;
 use futures::TryStreamExt;
 use futures::future::try_join_all;
-use prost_types::FieldMask;
 use haneul_indexer_alt_framework::IndexerArgs;
 use haneul_indexer_alt_framework::ingestion::ClientArgs;
 use haneul_indexer_alt_framework::ingestion::IngestionConfig;
@@ -44,8 +43,8 @@ use haneul_rpc::proto::haneul::rpc::v2::ListOwnedObjectsRequest;
 use haneul_rpc::proto::haneul::rpc::v2::Transaction as GrpcTransaction;
 use haneul_rpc::proto::haneul::rpc::v2::UserSignature;
 use haneul_test_transaction_builder::TestTransactionBuilder;
-use haneul_types::base_types::ObjectID;
 use haneul_types::base_types::HaneulAddress;
+use haneul_types::base_types::ObjectID;
 use haneul_types::effects::TransactionEffectsAPI;
 use haneul_types::message_envelope::Message;
 use haneul_types::object::Object;
@@ -54,6 +53,7 @@ use haneul_types::storage::ObjectKey;
 use haneul_types::transaction::Transaction;
 use haneul_types::transaction::TransactionData;
 use haneul_types::utils::to_sender_signed_transaction;
+use prost_types::FieldMask;
 use test_cluster::{TestCluster, TestClusterBuilder};
 use tokio::process::Command as TokioCommand;
 use tokio::time::interval;
@@ -363,7 +363,11 @@ impl TestHarness {
     }
 
     /// Build, sign, and execute a HANEUL transfer via gRPC.
-    async fn transfer_haneul(&mut self, recipient: HaneulAddress, amount: u64) -> Result<Transaction> {
+    async fn transfer_haneul(
+        &mut self,
+        recipient: HaneulAddress,
+        amount: u64,
+    ) -> Result<Transaction> {
         let sender = self.cluster.get_address_0();
         let keystore = &self.cluster.wallet.config.keystore;
 

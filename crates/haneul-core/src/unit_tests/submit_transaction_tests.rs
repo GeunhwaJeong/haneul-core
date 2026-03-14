@@ -8,7 +8,7 @@ use consensus_core::BlockStatus;
 use consensus_types::block::{BlockRef, PING_TRANSACTION_INDEX};
 use fastcrypto::traits::KeyPair;
 use haneul_test_transaction_builder::TestTransactionBuilder;
-use haneul_types::base_types::{ObjectRef, HaneulAddress, random_object_ref};
+use haneul_types::base_types::{HaneulAddress, ObjectRef, random_object_ref};
 use haneul_types::crypto::{AccountKeyPair, get_account_key_pair};
 use haneul_types::effects::TransactionEffectsAPI as _;
 use haneul_types::error::{HaneulError, HaneulErrorKind, UserInputError};

@@ -5,8 +5,6 @@ use std::path::PathBuf;
 use std::time::Duration;
 use std::{num::NonZeroUsize, path::Path, sync::Arc};
 
-use haneullabs_common::in_test_configuration;
-use rand::rngs::OsRng;
 use haneul_config::ExecutionCacheConfig;
 use haneul_config::genesis::{TokenAllocation, TokenDistributionScheduleBuilder};
 use haneul_config::node::AuthorityOverloadConfig;
@@ -22,6 +20,8 @@ use haneul_types::crypto::{
 use haneul_types::object::Object;
 use haneul_types::supported_protocol_versions::SupportedProtocolVersions;
 use haneul_types::traffic_control::{PolicyConfig, RemoteFirewallConfig};
+use haneullabs_common::in_test_configuration;
+use rand::rngs::OsRng;
 
 use crate::genesis_config::{AccountConfig, DEFAULT_GAS_AMOUNT, ValidatorGenesisConfigBuilder};
 use crate::genesis_config::{GenesisConfig, ValidatorGenesisConfig};
@@ -684,16 +684,16 @@ mod tests {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
     use haneul_config::genesis::Genesis;
     use haneul_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
     use haneul_types::epoch_data::EpochData;
     use haneul_types::execution_params::ExecutionOrEarlyError;
     use haneul_types::gas::HaneulGasStatus;
+    use haneul_types::haneul_system_state::HaneulSystemStateTrait;
     use haneul_types::in_memory_storage::InMemoryStorage;
     use haneul_types::metrics::LimitsMetrics;
-    use haneul_types::haneul_system_state::HaneulSystemStateTrait;
     use haneul_types::transaction::CheckedInputObjects;
+    use std::sync::Arc;
 
     #[test]
     fn roundtrip() {
@@ -713,7 +713,8 @@ mod test {
         let builder = crate::network_config_builder::ConfigBuilder::new_with_temp_dir();
         let network_config = builder.build();
         let genesis = network_config.genesis;
-        let protocol_version = ProtocolVersion::new(genesis.haneul_system_object().protocol_version());
+        let protocol_version =
+            ProtocolVersion::new(genesis.haneul_system_object().protocol_version());
         let protocol_config = ProtocolConfig::get_for_version(protocol_version, Chain::Unknown);
 
         let genesis_transaction = genesis.transaction().clone();

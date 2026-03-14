@@ -9,11 +9,11 @@ use crate::{
 };
 use fastcrypto::encoding::{Base58, Encoding, Hex};
 use fastcrypto::hash::{Blake2b256, HashFunction};
+use haneul_protocol_config::Chain;
 use once_cell::sync::{Lazy, OnceCell};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::{Bytes, serde_as};
-use haneul_protocol_config::Chain;
 use tracing::info;
 
 /// A representation of a 32 byte digest

@@ -5,9 +5,6 @@ use crate::authority::AuthorityPerEpochStore;
 use crate::authority::authority_per_epoch_store::CancelConsensusCertificateReason;
 use crate::execution_cache::ObjectCacheRead;
 use either::Either;
-use std::collections::BTreeMap;
-use std::collections::HashMap;
-use std::collections::HashSet;
 use haneul_types::HANEUL_ACCUMULATOR_ROOT_OBJECT_ID;
 use haneul_types::HANEUL_CLOCK_OBJECT_ID;
 use haneul_types::HANEUL_CLOCK_OBJECT_SHARED_VERSION;
@@ -23,7 +20,12 @@ use haneul_types::storage::{
 };
 use haneul_types::transaction::SharedObjectMutability;
 use haneul_types::transaction::{SharedInputObject, TransactionDataAPI, TransactionKey};
-use haneul_types::{HANEUL_RANDOMNESS_STATE_OBJECT_ID, base_types::SequenceNumber, error::HaneulResult};
+use haneul_types::{
+    HANEUL_RANDOMNESS_STATE_OBJECT_ID, base_types::SequenceNumber, error::HaneulResult,
+};
+use std::collections::BTreeMap;
+use std::collections::HashMap;
+use std::collections::HashSet;
 use tracing::trace;
 
 use super::epoch_start_configuration::EpochStartConfigTrait;
@@ -541,17 +543,17 @@ mod tests {
         ConsensusSharedObjVerAssignment, SharedObjVerManager,
     };
     use crate::authority::test_authority_builder::TestAuthorityBuilder;
-    use std::collections::{BTreeMap, HashMap};
-    use std::sync::Arc;
     use haneul_protocol_config::ProtocolConfig;
     use haneul_test_transaction_builder::TestTransactionBuilder;
-    use haneul_types::base_types::{ObjectID, SequenceNumber, HaneulAddress};
+    use haneul_types::base_types::{HaneulAddress, ObjectID, SequenceNumber};
     use haneul_types::crypto::{RandomnessRound, get_account_key_pair};
     use haneul_types::digests::ObjectDigest;
     use haneul_types::effects::TestEffectsBuilder;
     use haneul_types::executable_transaction::{
         CertificateProof, ExecutableTransaction, VerifiedExecutableTransaction,
     };
+    use std::collections::{BTreeMap, HashMap};
+    use std::sync::Arc;
 
     use haneul_types::object::Object;
     use haneul_types::transaction::{ObjectArg, SenderSignedData, VerifiedTransaction};
@@ -857,8 +859,10 @@ mod tests {
 
         // Check that the final version of the shared object is the lamport version of the last
         // transaction.
-        shared_input_next_versions
-            .remove(&(HANEUL_ACCUMULATOR_ROOT_OBJECT_ID, SequenceNumber::from_u64(1)));
+        shared_input_next_versions.remove(&(
+            HANEUL_ACCUMULATOR_ROOT_OBJECT_ID,
+            SequenceNumber::from_u64(1),
+        ));
         assert_eq!(
             shared_input_next_versions,
             HashMap::from([

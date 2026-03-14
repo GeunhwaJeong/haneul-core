@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use clap::Parser;
-use std::env;
-use std::sync::Arc;
 use haneul_config::haneul_config_dir;
 use haneul_faucet::{AppState, create_wallet_context, start_faucet};
 use haneul_faucet::{FaucetConfig, LocalFaucet};
+use std::env;
+use std::sync::Arc;
 
 // Define the `GIT_REVISION` and `VERSION` consts
 bin_version::bin_version!();

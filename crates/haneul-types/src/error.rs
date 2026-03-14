@@ -1002,7 +1002,8 @@ impl HaneulErrorKind {
     pub fn individual_error_indicates_epoch_change(&self) -> bool {
         matches!(
             self,
-            HaneulErrorKind::ValidatorHaltedAtEpochEnd | HaneulErrorKind::MissingCommitteeAtEpoch(_)
+            HaneulErrorKind::ValidatorHaltedAtEpochEnd
+                | HaneulErrorKind::MissingCommitteeAtEpoch(_)
         )
     }
 
@@ -1042,7 +1043,9 @@ impl HaneulErrorKind {
             // Non retryable error
             HaneulErrorKind::ExecutionError(..) => false,
             HaneulErrorKind::ByzantineAuthoritySuspicion { .. } => false,
-            HaneulErrorKind::QuorumFailedToGetEffectsQuorumWhenProcessingTransaction { .. } => false,
+            HaneulErrorKind::QuorumFailedToGetEffectsQuorumWhenProcessingTransaction { .. } => {
+                false
+            }
             HaneulErrorKind::TxAlreadyFinalizedWithDifferentUserSigs => false,
             HaneulErrorKind::FailedToVerifyTxCertWithExecutedEffects { .. } => false,
             HaneulErrorKind::ObjectLockConflict { .. } => false,
@@ -1088,7 +1091,9 @@ impl HaneulErrorKind {
 
     pub fn retry_after_secs(&self) -> u64 {
         match self {
-            HaneulErrorKind::ValidatorOverloadedRetryAfter { retry_after_secs } => *retry_after_secs,
+            HaneulErrorKind::ValidatorOverloadedRetryAfter { retry_after_secs } => {
+                *retry_after_secs
+            }
             _ => 0,
         }
     }

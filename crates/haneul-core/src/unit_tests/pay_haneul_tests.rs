@@ -5,9 +5,7 @@ use crate::authority::AuthorityState;
 use crate::authority::authority_tests::{init_state_with_committee, submit_and_execute};
 use crate::authority::test_authority_builder::TestAuthorityBuilder;
 use futures::future::join_all;
-use std::collections::HashMap;
-use std::sync::Arc;
-use haneul_types::base_types::{ObjectID, ObjectRef, HaneulAddress};
+use haneul_types::base_types::{HaneulAddress, ObjectID, ObjectRef};
 use haneul_types::crypto::AccountKeyPair;
 use haneul_types::effects::{SignedTransactionEffects, TransactionEffectsAPI};
 use haneul_types::error::{HaneulErrorKind, UserInputError};
@@ -18,6 +16,8 @@ use haneul_types::programmable_transaction_builder::ProgrammableTransactionBuild
 use haneul_types::transaction::TransactionData;
 use haneul_types::utils::to_sender_signed_transaction;
 use haneul_types::{base_types::dbg_addr, crypto::get_key_pair, error::HaneulError};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 #[tokio::test]
 async fn test_pay_haneul_failure_empty_recipients() {

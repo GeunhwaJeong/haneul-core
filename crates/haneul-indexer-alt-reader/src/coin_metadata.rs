@@ -9,13 +9,13 @@ use diesel::BoolExpressionMethods;
 use diesel::ExpressionMethods;
 use diesel::JoinOnDsl;
 use diesel::QueryDsl;
-use move_core_types::language_storage::StructTag;
 use haneul_indexer_alt_schema::objects::StoredObjInfo;
 use haneul_indexer_alt_schema::schema::obj_info;
 use haneul_types::HANEUL_FRAMEWORK_ADDRESS;
 use haneul_types::TypeTag;
 use haneul_types::coin::COIN_METADATA_STRUCT_NAME;
 use haneul_types::coin::COIN_MODULE_NAME;
+use move_core_types::language_storage::StructTag;
 
 use crate::error::Error;
 use crate::pg_reader::PgReader;

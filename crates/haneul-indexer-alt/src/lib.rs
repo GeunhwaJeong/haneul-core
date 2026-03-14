@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Context;
-use prometheus::Registry;
 use haneul_indexer_alt_framework::Indexer;
 use haneul_indexer_alt_framework::IndexerArgs;
 use haneul_indexer_alt_framework::ingestion::ClientArgs;
@@ -15,6 +14,7 @@ use haneul_indexer_alt_framework::postgres::Db;
 use haneul_indexer_alt_framework::postgres::DbArgs;
 use haneul_indexer_alt_metrics::db::DbConnectionStatsCollector;
 use haneul_indexer_alt_schema::MIGRATIONS;
+use prometheus::Registry;
 use url::Url;
 
 use crate::bootstrap::bootstrap;

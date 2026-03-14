@@ -10,8 +10,6 @@ use std::{
 use async_trait::async_trait;
 use fullnode_reconfig_observer::FullNodeReconfigObserver;
 use futures::TryStreamExt;
-use haneullabs_common::{fatal, random::get_rng};
-use rand::{Rng, seq::IteratorRandom};
 use haneul_config::genesis::Genesis;
 use haneul_core::{
     authority_aggregator::{AuthorityAggregator, AuthorityAggregatorBuilder},
@@ -57,7 +55,11 @@ use haneul_types::{
     effects::{TransactionEffectsAPI, TransactionEvents},
     execution_status::ExecutionFailureStatus,
 };
-use haneul_types::{gas_coin::GAS, haneul_system_state::haneul_system_state_summary::HaneulSystemStateSummary};
+use haneul_types::{
+    gas_coin::GAS, haneul_system_state::haneul_system_state_summary::HaneulSystemStateSummary,
+};
+use haneullabs_common::{fatal, random::get_rng};
+use rand::{Rng, seq::IteratorRandom};
 use tokio::time::sleep;
 use tracing::{debug, info, instrument, warn};
 
@@ -324,14 +326,19 @@ impl ExecutionEffects {
 pub trait ValidatorProxy {
     async fn get_object(&self, object_id: ObjectID) -> Result<Object, anyhow::Error>;
 
-    async fn get_haneul_address_balance(&self, address: HaneulAddress) -> Result<u64, anyhow::Error>;
+    async fn get_haneul_address_balance(
+        &self,
+        address: HaneulAddress,
+    ) -> Result<u64, anyhow::Error>;
 
     async fn get_owned_objects(
         &self,
         account_address: HaneulAddress,
     ) -> Result<Vec<(u64, Object)>, anyhow::Error>;
 
-    async fn get_latest_system_state_object(&self) -> Result<HaneulSystemStateSummary, anyhow::Error>;
+    async fn get_latest_system_state_object(
+        &self,
+    ) -> Result<HaneulSystemStateSummary, anyhow::Error>;
 
     async fn execute_transaction_block(
         &self,
@@ -528,7 +535,9 @@ impl ValidatorProxy for LocalValidatorAggregatorProxy {
         unimplemented!("Not available for local proxy");
     }
 
-    async fn get_latest_system_state_object(&self) -> Result<HaneulSystemStateSummary, anyhow::Error> {
+    async fn get_latest_system_state_object(
+        &self,
+    ) -> Result<HaneulSystemStateSummary, anyhow::Error> {
         let auth_agg = self.td.authority_aggregator().load();
         Ok(auth_agg
             .get_latest_system_state_object_for_testing()
@@ -905,8 +914,14 @@ fn is_retryable_sdk_error(err: &impl std::fmt::Debug) -> bool {
 
 #[async_trait]
 impl ValidatorProxy for FullNodeProxy {
-    async fn get_haneul_address_balance(&self, address: HaneulAddress) -> Result<u64, anyhow::Error> {
-        let balance = self.haneul_client.get_balance(address, &GAS::type_()).await?;
+    async fn get_haneul_address_balance(
+        &self,
+        address: HaneulAddress,
+    ) -> Result<u64, anyhow::Error> {
+        let balance = self
+            .haneul_client
+            .get_balance(address, &GAS::type_())
+            .await?;
 
         Ok(balance.address_balance())
     }
@@ -939,7 +954,9 @@ impl ValidatorProxy for FullNodeProxy {
         Ok(values_objects)
     }
 
-    async fn get_latest_system_state_object(&self) -> Result<HaneulSystemStateSummary, anyhow::Error> {
+    async fn get_latest_system_state_object(
+        &self,
+    ) -> Result<HaneulSystemStateSummary, anyhow::Error> {
         Ok(self.haneul_client.get_system_state_summary(None).await?)
     }
 

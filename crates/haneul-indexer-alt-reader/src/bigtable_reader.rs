@@ -8,7 +8,6 @@ use std::time::Duration;
 use anyhow::Context;
 use anyhow::bail;
 use async_graphql::dataloader::DataLoader;
-use prometheus::Registry;
 use haneul_kvstore::BigTableClient;
 use haneul_kvstore::CheckpointData;
 use haneul_kvstore::KeyValueStoreReader;
@@ -19,6 +18,7 @@ use haneul_types::digests::TransactionDigest;
 use haneul_types::messages_checkpoint::CheckpointSequenceNumber;
 use haneul_types::object::Object;
 use haneul_types::storage::ObjectKey;
+use prometheus::Registry;
 use tracing::warn;
 
 #[derive(clap::Args, Debug, Clone, Default)]

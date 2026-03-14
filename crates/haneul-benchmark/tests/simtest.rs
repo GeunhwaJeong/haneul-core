@@ -3,17 +3,6 @@
 
 #[cfg(msim)]
 mod test {
-    use haneullabs_common::{random::get_rng, register_debug_fatal_handler};
-    use prost::Message;
-    use rand::{Rng, distributions::uniform::SampleRange, thread_rng};
-    use std::collections::BTreeMap;
-    use std::collections::HashSet;
-    use std::num::NonZeroUsize;
-    use std::path::PathBuf;
-    use std::str::FromStr;
-    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-    use std::sync::{Arc, Mutex};
-    use std::time::{Duration, Instant};
     use haneul_benchmark::BenchmarkProxyMetrics;
     use haneul_benchmark::bank::BenchmarkBank;
     use haneul_benchmark::system_state_observer::SystemStateObserver;
@@ -59,6 +48,17 @@ mod test {
     use haneul_types::messages_checkpoint::VerifiedCheckpoint;
     use haneul_types::supported_protocol_versions::SupportedProtocolVersions;
     use haneul_types::traffic_control::{FreqThresholdConfig, PolicyConfig, PolicyType};
+    use haneullabs_common::{random::get_rng, register_debug_fatal_handler};
+    use prost::Message;
+    use rand::{Rng, distributions::uniform::SampleRange, thread_rng};
+    use std::collections::BTreeMap;
+    use std::collections::HashSet;
+    use std::num::NonZeroUsize;
+    use std::path::PathBuf;
+    use std::str::FromStr;
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
     use test_cluster::{TestCluster, TestClusterBuilder};
     use tracing::{error, info, trace};
     use typed_store::traits::Map;

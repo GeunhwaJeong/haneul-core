@@ -6,13 +6,13 @@ use super::{
     VerifiedSignedVersionedNodeInfo,
 };
 use anemo::{PeerId, Request, Response, types::PeerInfo};
+use haneul_config::p2p::AccessType;
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::{Arc, OnceLock, RwLock},
 };
-use haneul_config::p2p::AccessType;
 use tokio::sync::mpsc;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

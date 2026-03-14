@@ -5,13 +5,6 @@ use anyhow::{Context, bail};
 use camino::Utf8Path;
 use fastcrypto::hash::HashFunction;
 use fastcrypto::traits::KeyPair;
-use move_binary_format::CompiledModule;
-use move_core_types::ident_str;
-use shared_crypto::intent::{Intent, IntentMessage, IntentScope};
-use std::collections::BTreeMap;
-use std::fs;
-use std::path::Path;
-use std::sync::Arc;
 use haneul_config::genesis::{
     Genesis, GenesisCeremonyParameters, GenesisChainParameters, TokenDistributionSchedule,
     UnsignedGenesis,
@@ -34,6 +27,9 @@ use haneul_types::execution_params::ExecutionOrEarlyError;
 use haneul_types::gas::HaneulGasStatus;
 use haneul_types::gas_coin::GasCoin;
 use haneul_types::governance::StakedHaneul;
+use haneul_types::haneul_system_state::{
+    HaneulSystemState, HaneulSystemStateTrait, get_haneul_system_state,
+};
 use haneul_types::id::UID;
 use haneul_types::in_memory_storage::InMemoryStorage;
 use haneul_types::inner_temporary_store::InnerTemporaryStore;
@@ -46,11 +42,19 @@ use haneul_types::messages_checkpoint::{
 use haneul_types::metrics::LimitsMetrics;
 use haneul_types::object::{Object, Owner};
 use haneul_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-use haneul_types::haneul_system_state::{HaneulSystemState, HaneulSystemStateTrait, get_haneul_system_state};
 use haneul_types::transaction::{
     CallArg, CheckedInputObjects, Command, InputObjectKind, ObjectReadResult, Transaction,
 };
-use haneul_types::{BRIDGE_ADDRESS, HANEUL_BRIDGE_OBJECT_ID, HANEUL_FRAMEWORK_ADDRESS, HANEUL_SYSTEM_ADDRESS};
+use haneul_types::{
+    BRIDGE_ADDRESS, HANEUL_BRIDGE_OBJECT_ID, HANEUL_FRAMEWORK_ADDRESS, HANEUL_SYSTEM_ADDRESS,
+};
+use move_binary_format::CompiledModule;
+use move_core_types::ident_str;
+use shared_crypto::intent::{Intent, IntentMessage, IntentScope};
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::Path;
+use std::sync::Arc;
 use tracing::trace;
 use validator_info::{GenesisValidatorInfo, GenesisValidatorMetadata, ValidatorInfo};
 
@@ -202,8 +206,8 @@ impl Builder {
     }
 
     fn committee(objects: &[Object]) -> Committee {
-        let haneul_system_object =
-            get_haneul_system_state(&objects).expect("Haneul System State object must always exist");
+        let haneul_system_object = get_haneul_system_state(&objects)
+            .expect("Haneul System State object must always exist");
         haneul_system_object
             .get_current_epoch_committee()
             .committee()
@@ -356,7 +360,10 @@ impl Builder {
                     .is_none()
             );
             assert_eq!(validator.info.haneul_address(), metadata.haneul_address);
-            assert_eq!(validator.info.protocol_key(), metadata.haneul_pubkey_bytes());
+            assert_eq!(
+                validator.info.protocol_key(),
+                metadata.haneul_pubkey_bytes()
+            );
             assert_eq!(validator.info.network_key, metadata.network_pubkey);
             assert_eq!(validator.info.worker_key, metadata.worker_pubkey);
             assert_eq!(
@@ -465,11 +472,12 @@ impl Builder {
             .iter()
             .filter_map(|o| GasCoin::try_from(o).ok().map(|g| (o.id(), (o, g))))
             .collect();
-        let mut staked_haneul_objects: BTreeMap<ObjectID, (&Object, StakedHaneul)> = unsigned_genesis
-            .objects()
-            .iter()
-            .filter_map(|o| StakedHaneul::try_from(o).ok().map(|s| (o.id(), (o, s))))
-            .collect();
+        let mut staked_haneul_objects: BTreeMap<ObjectID, (&Object, StakedHaneul)> =
+            unsigned_genesis
+                .objects()
+                .iter()
+                .filter_map(|o| StakedHaneul::try_from(o).ok().map(|s| (o.id(), (o, s))))
+                .collect();
 
         for allocation in token_distribution_schedule.allocations {
             if let Some(staked_with_validator) = allocation.staked_with_validator {
@@ -488,12 +496,17 @@ impl Builder {
                     })
                     .map(|(k, _)| *k)
                     .expect("all allocations should be present");
-                let staked_haneul_object = staked_haneul_objects.remove(&staked_haneul_object_id).unwrap();
+                let staked_haneul_object = staked_haneul_objects
+                    .remove(&staked_haneul_object_id)
+                    .unwrap();
                 assert_eq!(
                     staked_haneul_object.0.owner,
                     Owner::AddressOwner(allocation.recipient_address)
                 );
-                assert_eq!(staked_haneul_object.1.principal(), allocation.amount_geunhwa);
+                assert_eq!(
+                    staked_haneul_object.1.principal(),
+                    allocation.amount_geunhwa
+                );
                 assert_eq!(staked_haneul_object.1.pool_id(), staking_pool_id);
                 assert_eq!(staked_haneul_object.1.activation_epoch(), 0);
             } else {
@@ -1171,7 +1184,9 @@ pub fn generate_genesis_system_object(
 
         if protocol_config.enable_bridge() {
             let bridge_uid = builder
-                .input(CallArg::Pure(UID::new(HANEUL_BRIDGE_OBJECT_ID).to_bcs_bytes()))
+                .input(CallArg::Pure(
+                    UID::new(HANEUL_BRIDGE_OBJECT_ID).to_bcs_bytes(),
+                ))
                 .unwrap();
             // TODO(bridge): this needs to be passed in as a parameter for next testnet regenesis
             // Hardcoding chain id to HaneulCustom
@@ -1240,7 +1255,9 @@ pub fn generate_genesis_system_object(
 
     // update the value of the clock to match the chain start time
     {
-        let object = written.get_mut(&haneul_types::HANEUL_CLOCK_OBJECT_ID).unwrap();
+        let object = written
+            .get_mut(&haneul_types::HANEUL_CLOCK_OBJECT_ID)
+            .unwrap();
         object
             .data
             .try_as_move_mut()

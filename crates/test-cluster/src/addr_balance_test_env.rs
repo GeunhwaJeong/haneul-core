@@ -12,7 +12,7 @@ use haneul_types::{
     accumulator_metadata::get_accumulator_object_count,
     accumulator_root::{AccumulatorValue, U128},
     balance::Balance,
-    base_types::{FullObjectRef, ObjectID, ObjectRef, SequenceNumber, HaneulAddress},
+    base_types::{FullObjectRef, HaneulAddress, ObjectID, ObjectRef, SequenceNumber},
     coin_reservation::ParsedObjectRefWithdrawal,
     digests::{ChainIdentifier, TransactionDigest},
     effects::{TransactionEffects, TransactionEffectsAPI},
@@ -375,10 +375,14 @@ pub fn get_balance(
     owner: HaneulAddress,
     coin_type: TypeTag,
 ) -> u64 {
-    haneul_core::accumulators::balances::get_balance(owner, child_object_resolver, coin_type).unwrap()
+    haneul_core::accumulators::balances::get_balance(owner, child_object_resolver, coin_type)
+        .unwrap()
 }
 
-pub fn get_haneul_balance(child_object_resolver: &dyn ChildObjectResolver, owner: HaneulAddress) -> u64 {
+pub fn get_haneul_balance(
+    child_object_resolver: &dyn ChildObjectResolver,
+    owner: HaneulAddress,
+) -> u64 {
     get_balance(child_object_resolver, owner, GAS::type_tag())
 }
 

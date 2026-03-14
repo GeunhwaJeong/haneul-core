@@ -3,12 +3,12 @@
 
 use std::path::{Path, PathBuf};
 
+use haneul_move_build::BuildConfig;
 use move_binary_format::{
     CompiledModule,
     compatibility::{self, Compatibility, InclusionCheck},
     normalized,
 };
-use haneul_move_build::BuildConfig;
 
 pub const TEST_DIR: &str = "tests";
 

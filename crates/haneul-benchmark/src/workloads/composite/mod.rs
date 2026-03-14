@@ -27,16 +27,10 @@ use crate::workloads::{Gas, GasCoinConfig, WorkloadBuilderInfo, WorkloadParams, 
 use crate::{ExecutionEffects, ValidatorProxy};
 use async_trait::async_trait;
 use futures::future::join_all;
-use operations::{InitRequirement, Operation, OperationResources, ResourceRequest};
-use rand::Rng;
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use haneul_protocol_config::ProtocolConfig;
 use haneul_test_transaction_builder::TestTransactionBuilder;
 use haneul_types::TypeTag;
-use haneul_types::base_types::{ObjectID, ObjectRef, SequenceNumber, HaneulAddress};
+use haneul_types::base_types::{HaneulAddress, ObjectID, ObjectRef, SequenceNumber};
 use haneul_types::crypto::{AccountKeyPair, get_key_pair};
 use haneul_types::digests::TransactionDigest;
 use haneul_types::gas_coin::GAS;
@@ -44,11 +38,17 @@ use haneul_types::object::Owner;
 use haneul_types::transaction::{
     Argument, CallArg, Command, ObjectArg, SharedObjectMutability, Transaction,
 };
-use haneul_types::{Identifier, HANEUL_FRAMEWORK_PACKAGE_ID};
 use haneul_types::{
     HANEUL_ACCUMULATOR_ROOT_OBJECT_ID, HANEUL_ADDRESS_ALIAS_STATE_OBJECT_ID,
     HANEUL_RANDOMNESS_STATE_OBJECT_ID,
 };
+use haneul_types::{HANEUL_FRAMEWORK_PACKAGE_ID, Identifier};
+use operations::{InitRequirement, Operation, OperationResources, ResourceRequest};
+use rand::Rng;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tracing::{debug, info, trace};
 
 use super::MultiGas;

@@ -10,12 +10,12 @@ use crate::grpc::alpha::proof_service_proto::{
 use bcs;
 use fastcrypto::hash::Blake2b256;
 use fastcrypto::merkle::MerkleTree;
-use std::str::FromStr;
 use haneul_types::{
     base_types::{ObjectID, ObjectRef},
     digests::Digest,
     messages_checkpoint::CheckpointArtifacts,
 };
+use std::str::FromStr;
 
 pub struct ProofServiceImpl {
     service: RpcService,

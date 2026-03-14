@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use clap::Parser;
+use haneul_sdk::wallet_context::WalletContext;
 use move_cli::base::test::UnitTestResult;
 use move_package_alt_compilation::build_config::BuildConfig;
 use std::path::Path;
-use haneul_sdk::wallet_context::WalletContext;
 
 pub mod build;
 pub mod cache_package;

@@ -35,8 +35,8 @@ use move_symbol_pool::Symbol;
 use haneul_package_alt::{HaneulFlavor, testnet_environment};
 use haneul_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
 use haneul_types::{
-    BRIDGE_ADDRESS, DEEPBOOK_ADDRESS, MOVE_STDLIB_ADDRESS, HANEUL_FRAMEWORK_ADDRESS,
-    HANEUL_SYSTEM_ADDRESS, TypeTag,
+    BRIDGE_ADDRESS, DEEPBOOK_ADDRESS, HANEUL_FRAMEWORK_ADDRESS, HANEUL_SYSTEM_ADDRESS,
+    MOVE_STDLIB_ADDRESS, TypeTag,
     base_types::ObjectID,
     error::{HaneulError, HaneulErrorKind, HaneulResult},
     is_system_package,

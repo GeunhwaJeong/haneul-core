@@ -8,7 +8,7 @@ use std::str::FromStr;
 use haneul_rpc::client::Client;
 use haneul_rpc::proto::haneul::rpc::v2::{Object, owner::OwnerKind};
 use haneul_sdk_types::{Address, StructTag};
-use haneul_types::base_types::{ObjectID, ObjectRef, SequenceNumber, HaneulAddress};
+use haneul_types::base_types::{HaneulAddress, ObjectID, ObjectRef, SequenceNumber};
 use haneul_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use haneul_types::rpc_proto_conversions::ObjectReferenceExt;
 use haneul_types::transaction::{Argument, Command, ObjectArg, ProgrammableTransaction};

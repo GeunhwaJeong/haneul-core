@@ -9,13 +9,6 @@ use std::{
 use consensus_core::{TransactionVerifier, ValidationError};
 use consensus_types::block::{BlockRef, TransactionIndex};
 use fastcrypto_tbls::dkg_v1;
-use itertools::Itertools;
-use haneullabs_metrics::monitored_scope;
-use nonempty::NonEmpty;
-use prometheus::{
-    IntCounter, IntCounterVec, Registry, register_int_counter_vec_with_registry,
-    register_int_counter_with_registry,
-};
 use haneul_macros::fail_point_arg;
 #[cfg(msim)]
 use haneul_types::base_types::AuthorityName;
@@ -27,6 +20,13 @@ use haneul_types::{
         CertifiedTransaction, InputObjectKind, PlainTransactionWithClaims, TransactionDataAPI,
         TransactionWithClaims,
     },
+};
+use haneullabs_metrics::monitored_scope;
+use itertools::Itertools;
+use nonempty::NonEmpty;
+use prometheus::{
+    IntCounter, IntCounterVec, Registry, register_int_counter_vec_with_registry,
+    register_int_counter_with_registry,
 };
 use tap::TapFallible;
 use tracing::{debug, info, instrument, warn};
@@ -297,17 +297,19 @@ impl HaneulTxValidator {
             {
                 // V2 format comparison
                 let Some(claimed_v2) = aliases_v2 else {
-                    return Err(
-                        HaneulErrorKind::InvalidRequest("missing address alias claim".into()).into(),
-                    );
+                    return Err(HaneulErrorKind::InvalidRequest(
+                        "missing address alias claim".into(),
+                    )
+                    .into());
                 };
                 *verified_tx.aliases() == claimed_v2
             } else {
                 // V1 format comparison: derive V1 from verified_tx and compare
                 let Some(claimed_v1) = aliases_v1 else {
-                    return Err(
-                        HaneulErrorKind::InvalidRequest("missing address alias claim".into()).into(),
-                    );
+                    return Err(HaneulErrorKind::InvalidRequest(
+                        "missing address alias claim".into(),
+                    )
+                    .into());
                 };
                 let computed_v1: Vec<_> = verified_tx
                     .tx()
@@ -617,10 +619,11 @@ mod tests {
                 // Create a transaction with an invalid signature
                 let aliases = tx.aliases().clone();
                 let mut signed_tx: Transaction = tx.into_tx().into();
-                signed_tx.tx_signatures_mut_for_testing()[0] =
-                    GenericSignature::Signature(haneul_types::crypto::Signature::Ed25519HaneulSignature(
+                signed_tx.tx_signatures_mut_for_testing()[0] = GenericSignature::Signature(
+                    haneul_types::crypto::Signature::Ed25519HaneulSignature(
                         Ed25519HaneulSignature::default(),
-                    ));
+                    ),
+                );
                 let tx_with_claims = PlainTransactionWithClaims::from_aliases(signed_tx, aliases);
                 bcs::to_bytes(&ConsensusTransaction::new_user_transaction_v2_message(
                     &name1,

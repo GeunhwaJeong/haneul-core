@@ -4,7 +4,7 @@
 use haneul_macros::*;
 use haneul_test_transaction_builder::FundSource;
 use haneul_types::{
-    base_types::{FullObjectRef, ObjectID, SequenceNumber, HaneulAddress},
+    base_types::{FullObjectRef, HaneulAddress, ObjectID, SequenceNumber},
     coin_reservation::ParsedObjectRefWithdrawal,
 };
 

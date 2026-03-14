@@ -13,13 +13,6 @@
 
 use crate::replay_txn::ReplayTransaction;
 use anyhow::{Context, Error, anyhow};
-use move_core_types::{language_storage::ModuleId, resolver::ModuleResolver};
-use move_trace_format::format::MoveTraceBuilder;
-use std::{
-    cell::RefCell,
-    collections::{BTreeMap, HashSet},
-    sync::Arc,
-};
 use haneul_data_store::{EpochStore, ObjectKey, ObjectStore, VersionQuery};
 use haneul_execution::Executor;
 use haneul_types::{
@@ -36,6 +29,13 @@ use haneul_types::{
     storage::{BackingPackageStore, ChildObjectResolver, PackageObject, ParentSync},
     supported_protocol_versions::ProtocolConfig,
     transaction::{CheckedInputObjects, TransactionData, TransactionDataAPI},
+};
+use move_core_types::{language_storage::ModuleId, resolver::ModuleResolver};
+use move_trace_format::format::MoveTraceBuilder;
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, HashSet},
+    sync::Arc,
 };
 use tracing::{debug, debug_span, trace};
 
@@ -54,7 +54,7 @@ pub struct TxnContextAndEffects {
     pub txn_data: TransactionData,             // original transaction data
     pub execution_effects: TransactionEffects, // effects of the replay execution
     pub expected_effects: TransactionEffects,  // expected effects as found in the transaction data
-    pub gas_status: HaneulGasStatus,              // gas status of the replay execution
+    pub gas_status: HaneulGasStatus,           // gas status of the replay execution
     pub object_cache: BTreeMap<ObjectID, BTreeMap<u64, Object>>, // object cache
     pub inner_store: InnerTemporaryStore,      // temporary store used during execution
     pub checkpoint: u64,                       // checkpoint where the transaction was included

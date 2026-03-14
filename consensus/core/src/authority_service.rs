@@ -13,10 +13,10 @@ use bytes::Bytes;
 use consensus_config::AuthorityIndex;
 use consensus_types::block::{BlockRef, Round};
 use futures::{Stream, StreamExt, ready, stream, task};
+use haneul_macros::fail_point_async;
 use haneullabs_metrics::spawn_monitored_task;
 use parking_lot::RwLock;
 use rand::seq::SliceRandom as _;
-use haneul_macros::fail_point_async;
 use tap::TapFallible;
 use tokio::sync::broadcast;
 use tokio_util::sync::ReusableBoxFuture;
@@ -463,7 +463,10 @@ impl<C: CoreThreadDispatcher> NetworkService for AuthorityService<C> {
                 let selected_num_blocks = max_response_num_blocks.saturating_sub(blocks.len());
                 if selected_num_blocks < missing_ancestors.len() {
                     missing_ancestors = missing_ancestors
-                        .choose_multiple(&mut haneullabs_common::random::get_rng(), selected_num_blocks)
+                        .choose_multiple(
+                            &mut haneullabs_common::random::get_rng(),
+                            selected_num_blocks,
+                        )
                         .copied()
                         .collect::<Vec<_>>();
                 }

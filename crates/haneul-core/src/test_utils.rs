@@ -2,10 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use fastcrypto::traits::KeyPair;
-use move_core_types::{account_address::AccountAddress, ident_str};
-use shared_crypto::intent::{Intent, IntentScope};
-use std::sync::Arc;
-use std::time::Duration;
 use haneul_config::genesis::Genesis;
 use haneul_macros::nondeterministic;
 use haneul_types::base_types::{FullObjectRef, ObjectID, random_object_ref};
@@ -20,12 +16,16 @@ use haneul_types::transaction::{
 use haneul_types::utils::create_fake_transaction;
 use haneul_types::utils::to_sender_signed_transaction;
 use haneul_types::{
-    base_types::{AuthorityName, ExecutionDigests, ObjectRef, HaneulAddress, TransactionDigest},
+    base_types::{AuthorityName, ExecutionDigests, HaneulAddress, ObjectRef, TransactionDigest},
     committee::Committee,
     crypto::{AuthoritySignInfo, AuthoritySignature},
     message_envelope::Message,
     transaction::CertifiedTransaction,
 };
+use move_core_types::{account_address::AccountAddress, ident_str};
+use shared_crypto::intent::{Intent, IntentScope};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::time::timeout;
 use tracing::{info, warn};
 

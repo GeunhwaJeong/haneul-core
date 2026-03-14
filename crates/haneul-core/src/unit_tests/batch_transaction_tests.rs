@@ -11,11 +11,11 @@ use haneul_types::{
 };
 
 use authority_tests::submit_and_execute;
-use move_core_types::{account_address::AccountAddress, ident_str};
 use haneul_types::{
     crypto::{AccountKeyPair, get_key_pair},
     object::Owner,
 };
+use move_core_types::{account_address::AccountAddress, ident_str};
 
 #[tokio::test]
 async fn test_batch_transaction_ok() -> anyhow::Result<()> {

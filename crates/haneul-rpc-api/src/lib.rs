@@ -1,12 +1,12 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use haneul_types::storage::RpcStateReader;
+use haneul_types::transaction_executor::TransactionExecutor;
 use haneullabs_network::callback::CallbackLayer;
 use reader::StateReader;
 use std::sync::Arc;
 use subscription::SubscriptionServiceHandle;
-use haneul_types::storage::RpcStateReader;
-use haneul_types::transaction_executor::TransactionExecutor;
 use tap::Pipe;
 
 pub mod client;
@@ -24,9 +24,9 @@ pub use config::Config;
 pub use error::{
     CheckpointNotFoundError, ErrorDetails, ErrorReason, ObjectNotFoundError, Result, RpcError,
 };
+pub use haneul_rpc::proto;
 pub use metrics::{RpcMetrics, RpcMetricsMakeCallbackHandler};
 pub use reader::TransactionNotFoundError;
-pub use haneul_rpc::proto;
 
 #[derive(Clone)]
 pub struct ServerVersion {

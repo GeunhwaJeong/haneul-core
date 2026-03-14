@@ -1178,10 +1178,16 @@ impl TryFrom<crate::crypto::Signature> for SimpleSignature {
 
     fn try_from(value: crate::crypto::Signature) -> Result<Self, Self::Error> {
         match value {
-            crate::crypto::Signature::Ed25519HaneulSignature(ed25519_haneul_signature) => Self::Ed25519 {
-                signature: Ed25519Signature::from_bytes(ed25519_haneul_signature.signature_bytes())?,
-                public_key: Ed25519PublicKey::from_bytes(ed25519_haneul_signature.public_key_bytes())?,
-            },
+            crate::crypto::Signature::Ed25519HaneulSignature(ed25519_haneul_signature) => {
+                Self::Ed25519 {
+                    signature: Ed25519Signature::from_bytes(
+                        ed25519_haneul_signature.signature_bytes(),
+                    )?,
+                    public_key: Ed25519PublicKey::from_bytes(
+                        ed25519_haneul_signature.public_key_bytes(),
+                    )?,
+                }
+            }
             crate::crypto::Signature::Secp256k1HaneulSignature(secp256k1_haneul_signature) => {
                 Self::Secp256k1 {
                     signature: Secp256k1Signature::from_bytes(
@@ -1263,7 +1269,9 @@ impl From<crate::transaction::CallArg> for Input {
                 let crate::transaction::Reservation::MaxAmountU64(amount) = withdrawal.reservation;
                 let crate::transaction::WithdrawalTypeArg::Balance(coin_type) = withdrawal.type_arg;
                 let source = match withdrawal.withdraw_from {
-                    crate::transaction::WithdrawFrom::Sender => haneul_sdk_types::WithdrawFrom::Sender,
+                    crate::transaction::WithdrawFrom::Sender => {
+                        haneul_sdk_types::WithdrawFrom::Sender
+                    }
                     crate::transaction::WithdrawFrom::Sponsor => {
                         haneul_sdk_types::WithdrawFrom::Sponsor
                     }

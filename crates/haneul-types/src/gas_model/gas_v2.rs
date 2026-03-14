@@ -16,9 +16,9 @@ mod checked {
         error::{ExecutionError, ExecutionErrorKind},
         gas_model::tables::{GasStatus, ZERO_COST_SCHEDULE},
     };
+    use haneul_protocol_config::*;
     use move_core_types::vm_status::StatusCode;
     use serde::{Deserialize, Serialize};
-    use haneul_protocol_config::*;
 
     /// A bucket defines a range of units that will be priced the same.
     /// After execution a call to `GasStatus::bucketize` will round the computation

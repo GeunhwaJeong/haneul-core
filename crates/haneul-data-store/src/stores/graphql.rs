@@ -11,6 +11,13 @@ use crate::{
 };
 use anyhow::{Context, Error, Result};
 use cynic::{GraphQlResponse, Operation};
+use haneul_types::{
+    committee::ProtocolVersion,
+    effects::TransactionEffects,
+    object::Object,
+    supported_protocol_versions::{Chain, ProtocolConfig},
+    transaction::TransactionData,
+};
 use reqwest::header::USER_AGENT;
 use std::time::Instant;
 use std::{
@@ -19,13 +26,6 @@ use std::{
         RwLock,
         atomic::{AtomicU64, Ordering},
     },
-};
-use haneul_types::{
-    committee::ProtocolVersion,
-    effects::TransactionEffects,
-    object::Object,
-    supported_protocol_versions::{Chain, ProtocolConfig},
-    transaction::TransactionData,
 };
 use tracing::{debug, debug_span};
 

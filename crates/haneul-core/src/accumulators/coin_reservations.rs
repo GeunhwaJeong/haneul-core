@@ -3,16 +3,16 @@
 
 use std::sync::Arc;
 
-use moka::sync::Cache as MokaCache;
 use haneul_types::{
     TypeTag,
     accumulator_root::{AccumulatorKey, AccumulatorValue},
-    base_types::{ObjectID, HaneulAddress},
+    base_types::{HaneulAddress, ObjectID},
     coin_reservation::{CoinReservationResolverTrait, ParsedObjectRefWithdrawal},
     error::{UserInputError, UserInputResult},
     storage::ChildObjectResolver,
     transaction::FundsWithdrawalArg,
 };
+use moka::sync::Cache as MokaCache;
 
 macro_rules! invalid_res_error {
     ($($args:tt)*) => {
@@ -42,38 +42,43 @@ impl CoinReservationResolver {
     ) -> UserInputResult<TypeTag> {
         let (owner, type_input) = self
             .object_id_to_type_cache
-            .try_get_with(object_id, || -> UserInputResult<(HaneulAddress, TypeTag)> {
-                // Load accumulator field object
-                let object = AccumulatorValue::load_object_by_id(
-                    self.child_object_resolver.as_ref(),
-                    None,
-                    object_id,
-                )
-                .map_err(|e| invalid_res_error!("could not load coin reservation object id {}", e))?
-                .ok_or_else(|| {
-                    invalid_res_error!("coin reservation object id {} not found", object_id)
-                })?;
-
-                let move_object = object.data.try_as_move().unwrap();
-
-                // Get the balance type
-                let type_input: TypeTag = move_object
-                    .type_()
-                    .balance_accumulator_field_type_maybe()
-                    .ok_or_else(|| {
-                        invalid_res_error!(
-                            "coin reservation object id {} is not a balance accumulator field",
-                            object_id
-                        )
-                    })?;
-
-                // get the owner
-                let (key, _): (AccumulatorKey, AccumulatorValue) =
-                    move_object.try_into().map_err(|e| {
+            .try_get_with(
+                object_id,
+                || -> UserInputResult<(HaneulAddress, TypeTag)> {
+                    // Load accumulator field object
+                    let object = AccumulatorValue::load_object_by_id(
+                        self.child_object_resolver.as_ref(),
+                        None,
+                        object_id,
+                    )
+                    .map_err(|e| {
                         invalid_res_error!("could not load coin reservation object id {}", e)
+                    })?
+                    .ok_or_else(|| {
+                        invalid_res_error!("coin reservation object id {} not found", object_id)
                     })?;
-                Ok((key.owner, type_input))
-            })
+
+                    let move_object = object.data.try_as_move().unwrap();
+
+                    // Get the balance type
+                    let type_input: TypeTag = move_object
+                        .type_()
+                        .balance_accumulator_field_type_maybe()
+                        .ok_or_else(|| {
+                            invalid_res_error!(
+                                "coin reservation object id {} is not a balance accumulator field",
+                                object_id
+                            )
+                        })?;
+
+                    // get the owner
+                    let (key, _): (AccumulatorKey, AccumulatorValue) =
+                        move_object.try_into().map_err(|e| {
+                            invalid_res_error!("could not load coin reservation object id {}", e)
+                        })?;
+                    Ok((key.owner, type_input))
+                },
+            )
             .map_err(|e| (*e).clone())?;
 
         if sender != owner {

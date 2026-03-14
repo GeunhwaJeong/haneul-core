@@ -5,6 +5,7 @@
 use std::{collections::HashMap, net::IpAddr, sync::Arc};
 
 use count_min_sketch::CountMinSketch32;
+use haneul_types::traffic_control::{FreqThresholdConfig, PolicyConfig, PolicyType, Weight};
 use haneullabs_metrics::spawn_monitored_task;
 use parking_lot::RwLock;
 use std::cmp::Reverse;
@@ -13,7 +14,6 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::time::Duration;
 use std::time::{Instant, SystemTime};
-use haneul_types::traffic_control::{FreqThresholdConfig, PolicyConfig, PolicyType, Weight};
 use tracing::{info, trace};
 
 const HIGHEST_RATES_CAPACITY: usize = 20;
@@ -518,11 +518,11 @@ impl TestPanicOnInvocationPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::{IpAddr, Ipv4Addr};
     use haneul_macros::sim_test;
     use haneul_types::traffic_control::{
         DEFAULT_SKETCH_CAPACITY, DEFAULT_SKETCH_PROBABILITY, DEFAULT_SKETCH_TOLERANCE,
     };
+    use std::net::{IpAddr, Ipv4Addr};
 
     #[sim_test]
     async fn test_freq_threshold_policy() {

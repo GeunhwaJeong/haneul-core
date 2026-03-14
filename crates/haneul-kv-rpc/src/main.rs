@@ -5,12 +5,12 @@ use anyhow::Result;
 use axum::Router;
 use axum::routing::get;
 use clap::Parser;
+use haneul_kv_rpc::KvRpcServer;
+use haneul_rpc_api::{RpcMetrics, RpcMetricsMakeCallbackHandler, ServerVersion};
 use haneullabs_network::callback::CallbackLayer;
 use prometheus::Registry;
 use std::sync::Arc;
 use std::time::Duration;
-use haneul_kv_rpc::KvRpcServer;
-use haneul_rpc_api::{RpcMetrics, RpcMetricsMakeCallbackHandler, ServerVersion};
 use telemetry_subscribers::TelemetryConfig;
 use tonic::transport::{Identity, Server, ServerTlsConfig};
 
@@ -86,15 +86,23 @@ async fn main() -> Result<()> {
         .register_encoded_file_descriptor_set(
             haneul_rpc_api::proto::google::protobuf::FILE_DESCRIPTOR_SET,
         )
-        .register_encoded_file_descriptor_set(haneul_rpc_api::proto::google::rpc::FILE_DESCRIPTOR_SET)
-        .register_encoded_file_descriptor_set(haneul_rpc::proto::haneul::rpc::v2::FILE_DESCRIPTOR_SET)
+        .register_encoded_file_descriptor_set(
+            haneul_rpc_api::proto::google::rpc::FILE_DESCRIPTOR_SET,
+        )
+        .register_encoded_file_descriptor_set(
+            haneul_rpc::proto::haneul::rpc::v2::FILE_DESCRIPTOR_SET,
+        )
         .build_v1()?;
     let reflection_v1alpha = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(
             haneul_rpc_api::proto::google::protobuf::FILE_DESCRIPTOR_SET,
         )
-        .register_encoded_file_descriptor_set(haneul_rpc_api::proto::google::rpc::FILE_DESCRIPTOR_SET)
-        .register_encoded_file_descriptor_set(haneul_rpc::proto::haneul::rpc::v2::FILE_DESCRIPTOR_SET)
+        .register_encoded_file_descriptor_set(
+            haneul_rpc_api::proto::google::rpc::FILE_DESCRIPTOR_SET,
+        )
+        .register_encoded_file_descriptor_set(
+            haneul_rpc::proto::haneul::rpc::v2::FILE_DESCRIPTOR_SET,
+        )
         .build_v1alpha()?;
     tokio::spawn(async {
         let web_server = Router::new().route("/health", get(health_check));
@@ -110,7 +118,9 @@ async fn main() -> Result<()> {
             Arc::new(RpcMetrics::new(&registry)),
         )))
         .add_service(
-            haneul_rpc::proto::haneul::rpc::v2::ledger_service_server::LedgerServiceServer::new(server),
+            haneul_rpc::proto::haneul::rpc::v2::ledger_service_server::LedgerServiceServer::new(
+                server,
+            ),
         )
         .add_service(reflection_v1)
         .add_service(reflection_v1alpha)

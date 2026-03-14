@@ -4,7 +4,7 @@
 use super::ObjectStore;
 use super::error::Result;
 use crate::balance_change::{BalanceChange, derive_balance_changes};
-use crate::base_types::{EpochId, ObjectID, ObjectType, SequenceNumber, HaneulAddress};
+use crate::base_types::{EpochId, HaneulAddress, ObjectID, ObjectType, SequenceNumber};
 use crate::committee::Committee;
 use crate::digests::{
     ChainIdentifier, CheckpointContentsDigest, CheckpointDigest, TransactionDigest,
@@ -674,8 +674,11 @@ pub trait RpcIndexes: Send + Sync {
 
     fn get_coin_info(&self, coin_type: &StructTag) -> Result<Option<CoinInfo>>;
 
-    fn get_balance(&self, owner: &HaneulAddress, coin_type: &StructTag)
-    -> Result<Option<BalanceInfo>>;
+    fn get_balance(
+        &self,
+        owner: &HaneulAddress,
+        coin_type: &StructTag,
+    ) -> Result<Option<BalanceInfo>>;
 
     fn balance_iter(
         &self,

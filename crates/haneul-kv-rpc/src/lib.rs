@@ -1,13 +1,13 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use prometheus::Registry;
-use std::sync::Arc;
 use haneul_kvstore::{BigTableClient, KeyValueStoreReader};
 use haneul_rpc::proto::haneul::rpc::v2::GetServiceInfoResponse;
 use haneul_rpc_api::ServerVersion;
 use haneul_types::digests::ChainIdentifier;
 use haneul_types::message_envelope::Message;
+use prometheus::Registry;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{Duration, sleep};
 use tracing::error;

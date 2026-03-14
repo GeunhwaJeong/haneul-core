@@ -16,7 +16,7 @@ use haneul_types::effects::TransactionEffectsAPI;
 use haneul_types::execution_status::{ExecutionFailureStatus, ExecutionStatus};
 use haneul_types::object::Owner;
 use haneul_types::transaction::{CallArg, ObjectArg, ProgrammableTransaction};
-use haneul_types::{MOVE_STDLIB_PACKAGE_ID, HANEUL_FRAMEWORK_PACKAGE_ID};
+use haneul_types::{HANEUL_FRAMEWORK_PACKAGE_ID, MOVE_STDLIB_PACKAGE_ID};
 
 #[test]
 #[cfg_attr(msim, ignore)]

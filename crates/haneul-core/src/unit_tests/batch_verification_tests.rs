@@ -5,10 +5,6 @@ use crate::signature_verifier::*;
 use crate::test_utils::{make_cert_with_large_committee, make_dummy_tx};
 use fastcrypto::traits::KeyPair;
 use futures::future::join_all;
-use itertools::Itertools as _;
-use prometheus::Registry;
-use rand::{Rng, thread_rng};
-use std::sync::Arc;
 use haneul_macros::sim_test;
 use haneul_protocol_config::ProtocolConfig;
 use haneul_types::committee::Committee;
@@ -20,6 +16,10 @@ use haneul_types::messages_checkpoint::{
 };
 use haneul_types::signature_verification::VerifiedDigestCache;
 use haneul_types::transaction::CertifiedTransaction;
+use itertools::Itertools as _;
+use prometheus::Registry;
+use rand::{Rng, thread_rng};
+use std::sync::Arc;
 
 // TODO consolidate with `gen_certs` in batch_verification_bench.rs
 fn gen_certs(

@@ -41,7 +41,7 @@ use crate::accumulators::funds_read::AccountFundsRead;
 use crate::authority::AuthorityStore;
 use crate::authority::authority_per_epoch_store::AuthorityPerEpochStore;
 use crate::authority::authority_store::{
-    ExecutionLockWriteGuard, LockDetailsDeprecated, ObjectLockStatus, HaneulLockResult,
+    ExecutionLockWriteGuard, HaneulLockResult, LockDetailsDeprecated, ObjectLockStatus,
 };
 use crate::authority::authority_store_tables::LiveObject;
 use crate::authority::backpressure::BackpressureManager;
@@ -53,15 +53,6 @@ use crate::transaction_outputs::TransactionOutputs;
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry as DashMapEntry;
 use futures::{FutureExt, future::BoxFuture};
-use moka::sync::SegmentedCache as MokaCache;
-use haneullabs_common::debug_fatal;
-use haneullabs_common::random_util::randomize_cache_capacity_in_tests;
-use haneullabs_common::sync::notify_read::NotifyRead;
-use parking_lot::Mutex;
-use std::collections::{BTreeMap, HashSet};
-use std::hash::Hash;
-use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
 use haneul_config::ExecutionCacheConfig;
 use haneul_macros::fail_point;
 use haneul_protocol_config::ProtocolVersion;
@@ -77,14 +68,23 @@ use haneul_types::effects::{TransactionEffects, TransactionEvents};
 use haneul_types::error::{HaneulError, HaneulErrorKind, HaneulResult, UserInputError};
 use haneul_types::executable_transaction::VerifiedExecutableTransaction;
 use haneul_types::global_state_hash::GlobalStateHash;
+use haneul_types::haneul_system_state::{HaneulSystemState, get_haneul_system_state};
 use haneul_types::message_envelope::Message;
 use haneul_types::messages_checkpoint::CheckpointSequenceNumber;
 use haneul_types::object::Object;
 use haneul_types::storage::{
     FullObjectKey, InputKey, MarkerValue, ObjectKey, ObjectOrTombstone, ObjectStore, PackageObject,
 };
-use haneul_types::haneul_system_state::{HaneulSystemState, get_haneul_system_state};
 use haneul_types::transaction::{TransactionDataAPI, VerifiedTransaction};
+use haneullabs_common::debug_fatal;
+use haneullabs_common::random_util::randomize_cache_capacity_in_tests;
+use haneullabs_common::sync::notify_read::NotifyRead;
+use moka::sync::SegmentedCache as MokaCache;
+use parking_lot::Mutex;
+use std::collections::{BTreeMap, HashSet};
+use std::hash::Hash;
+use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 use tap::TapOptional;
 use tracing::{debug, info, instrument, trace, warn};
 
@@ -1058,8 +1058,9 @@ impl WritebackCache {
         // cache before removing from the dirty set.
         db_batch.write().expect("db error");
 
-        let _metrics_guard =
-            haneullabs_metrics::monitored_scope("WritebackCache::commit_transaction_outputs::flush");
+        let _metrics_guard = haneullabs_metrics::monitored_scope(
+            "WritebackCache::commit_transaction_outputs::flush",
+        );
         for outputs in all_outputs.iter() {
             let tx_digest = outputs.transaction.digest();
             assert!(
@@ -1832,7 +1833,11 @@ impl ObjectCacheRead for WritebackCache {
         }
     }
 
-    fn get_lock(&self, obj_ref: ObjectRef, epoch_store: &AuthorityPerEpochStore) -> HaneulLockResult {
+    fn get_lock(
+        &self,
+        obj_ref: ObjectRef,
+        epoch_store: &AuthorityPerEpochStore,
+    ) -> HaneulLockResult {
         let cur_epoch = epoch_store.epoch();
         match self.get_object_by_id_cache_only("lock", &obj_ref.0) {
             CacheResult::Hit((_, obj)) => {

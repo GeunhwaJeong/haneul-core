@@ -43,7 +43,8 @@ fn coins(objects: &[Object]) -> impl Iterator<Item = (&HaneulAddress, TypeTag, u
             Owner::AddressOwner(haneul_address)
             | Owner::ObjectOwner(haneul_address)
             | Owner::ConsensusAddressOwner {
-                owner: haneul_address, ..
+                owner: haneul_address,
+                ..
             } => haneul_address,
             Owner::Shared { .. } | Owner::Immutable => return None,
         };
@@ -609,7 +610,8 @@ mod tests {
         };
         let effects = create_effects_with_accumulator_writes(vec![(obj_id, write)]);
 
-        let result = derive_balance_changes(&effects, &[haneul_input], &[haneul_output, custom_output]);
+        let result =
+            derive_balance_changes(&effects, &[haneul_input], &[haneul_output, custom_output]);
 
         assert_eq!(result.len(), 2);
 

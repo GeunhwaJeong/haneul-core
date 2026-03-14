@@ -18,7 +18,9 @@ use crate::{LIVE_TASK_TARGET_CHECKPOINT, Task, Tasks, progress::ProgressSavingPo
 use haneul_bridge_schema::models::ProgressStore;
 use haneul_bridge_schema::schema;
 use haneul_bridge_schema::schema::progress_store::{columns, dsl};
-use haneul_bridge_schema::schema::{haneul_error_transactions, token_transfer, token_transfer_data};
+use haneul_bridge_schema::schema::{
+    haneul_error_transactions, token_transfer, token_transfer_data,
+};
 
 /// Persistent layer impl
 #[derive(Clone)]

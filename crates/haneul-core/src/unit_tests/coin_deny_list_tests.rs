@@ -5,13 +5,9 @@ use crate::authority::AuthorityState;
 use crate::authority::authority_tests::submit_and_execute_with_options;
 use crate::authority::move_integration_tests::build_and_try_publish_test_package;
 use crate::authority::test_authority_builder::TestAuthorityBuilder;
-use move_core_types::ident_str;
-use move_core_types::identifier::Identifier;
-use move_core_types::language_storage::{StructTag, TypeTag};
-use std::sync::Arc;
 use haneul_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
 use haneul_test_transaction_builder::{FundSource, TestTransactionBuilder};
-use haneul_types::base_types::{ObjectID, ObjectRef, HaneulAddress, dbg_addr};
+use haneul_types::base_types::{HaneulAddress, ObjectID, ObjectRef, dbg_addr};
 use haneul_types::crypto::{AccountKeyPair, get_account_key_pair};
 use haneul_types::deny_list_v1::{CoinDenyCap, RegulatedCoinMetadata};
 use haneul_types::deny_list_v2::{
@@ -26,6 +22,10 @@ use haneul_types::transaction::{
     Transaction, TransactionData,
 };
 use haneul_types::{HANEUL_DENY_LIST_OBJECT_ID, HANEUL_FRAMEWORK_PACKAGE_ID};
+use move_core_types::ident_str;
+use move_core_types::identifier::Identifier;
+use move_core_types::language_storage::{StructTag, TypeTag};
+use std::sync::Arc;
 
 // Test that a regulated coin can be created and all the necessary objects are created with the right types.
 // Make sure that these types can be converted to Rust types.
@@ -87,7 +87,10 @@ async fn test_regulated_coin_v2_types() {
     let metadata = env.extract_v2_metadata().await;
 
     // Step 2: Deny an address and check the denylist types.
-    let deny_list_object_init_version = env.get_latest_object_ref(&HANEUL_DENY_LIST_OBJECT_ID).await.1;
+    let deny_list_object_init_version = env
+        .get_latest_object_ref(&HANEUL_DENY_LIST_OBJECT_ID)
+        .await
+        .1;
     let regulated_coin_type = metadata.regulated_coin_type();
     let deny_address = dbg_addr(2);
     let tx = TestTransactionBuilder::new(
@@ -219,7 +222,10 @@ async fn test_regulated_coin_v2_funds_withdraw_deny() {
 
     let metadata = env.extract_v2_metadata().await;
     let regulated_coin_type = metadata.regulated_coin_type();
-    let deny_list_object_init_version = env.get_latest_object_ref(&HANEUL_DENY_LIST_OBJECT_ID).await.1;
+    let deny_list_object_init_version = env
+        .get_latest_object_ref(&HANEUL_DENY_LIST_OBJECT_ID)
+        .await
+        .1;
     let mut env_gas_ref = env.get_latest_object_ref(&env.gas_object_id).await;
     let deny_cap_ref = env.get_latest_object_ref(&metadata.deny_cap_id).await;
 

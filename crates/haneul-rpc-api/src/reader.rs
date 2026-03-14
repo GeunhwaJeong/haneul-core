@@ -40,7 +40,9 @@ impl StateReader {
     #[tracing::instrument(skip(self))]
     pub fn get_system_state_summary(
         &self,
-    ) -> Result<haneul_types::haneul_system_state::haneul_system_state_summary::HaneulSystemStateSummary> {
+    ) -> Result<
+        haneul_types::haneul_system_state::haneul_system_state_summary::HaneulSystemStateSummary,
+    > {
         use haneul_types::haneul_system_state::HaneulSystemStateTrait;
 
         let system_state = self.get_system_state()?;
@@ -134,8 +136,8 @@ impl StateReader {
         owner: haneul_types::base_types::HaneulAddress,
         coin_type: move_core_types::language_storage::StructTag,
     ) -> Option<u64> {
-        use haneul_types::MoveTypeTagTraitGeneric;
         use haneul_types::HANEUL_ACCUMULATOR_ROOT_OBJECT_ID;
+        use haneul_types::MoveTypeTagTraitGeneric;
         use haneul_types::accumulator_root::AccumulatorKey;
         use haneul_types::dynamic_field::DynamicFieldKey;
 

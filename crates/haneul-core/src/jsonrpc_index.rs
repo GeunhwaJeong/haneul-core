@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use bincode::Options;
+use haneul_types::accumulator_event::AccumulatorEvent;
 use itertools::Itertools;
 use move_core_types::language_storage::{ModuleId, StructTag, TypeTag};
 use parking_lot::ArcMutexGuard;
@@ -19,7 +20,6 @@ use prometheus::{
     register_int_counter_with_registry,
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use haneul_types::accumulator_event::AccumulatorEvent;
 use typed_store::TypedStoreError;
 use typed_store::rocksdb::compaction_filter::Decision;
 
@@ -27,7 +27,7 @@ use haneul_json_rpc_types::{HaneulObjectDataFilter, TransactionFilter};
 use haneul_storage::mutex_table::MutexTable;
 use haneul_storage::sharded_lru::ShardedLruCache;
 use haneul_types::base_types::{
-    ObjectDigest, ObjectID, SequenceNumber, HaneulAddress, TransactionDigest, TxSequenceNumber,
+    HaneulAddress, ObjectDigest, ObjectID, SequenceNumber, TransactionDigest, TxSequenceNumber,
 };
 use haneul_types::base_types::{ObjectInfo, ObjectRef};
 use haneul_types::digests::TransactionEventsDigest;
@@ -1822,8 +1822,9 @@ impl IndexStore {
         &self,
         object: ObjectID,
         cursor: Option<ObjectID>,
-    ) -> HaneulResult<impl Iterator<Item = Result<(ObjectID, DynamicFieldInfo), TypedStoreError>> + '_>
-    {
+    ) -> HaneulResult<
+        impl Iterator<Item = Result<(ObjectID, DynamicFieldInfo), TypedStoreError>> + '_,
+    > {
         Ok(self.tables.get_dynamic_fields_iterator(object, cursor))
     }
 
@@ -2079,8 +2080,11 @@ impl IndexStore {
                     cloned_coin_type,
                 )
                 .map_err(|e| {
-                    HaneulErrorKind::ExecutionError(format!("Failed to read balance frm DB: {:?}", e))
-                        .into()
+                    HaneulErrorKind::ExecutionError(format!(
+                        "Failed to read balance frm DB: {:?}",
+                        e
+                    ))
+                    .into()
                 })
             })
     }
@@ -2114,8 +2118,11 @@ impl IndexStore {
         let coin_index_cloned = self.tables.coin_index_2.clone();
         self.caches.all_balances.get_with(owner, move || {
             Self::get_all_balances_from_db(metrics_cloned, coin_index_cloned, owner).map_err(|e| {
-                HaneulErrorKind::ExecutionError(format!("Failed to read all balance from DB: {:?}", e))
-                    .into()
+                HaneulErrorKind::ExecutionError(format!(
+                    "Failed to read all balance from DB: {:?}",
+                    e
+                ))
+                .into()
             })
         })
     }
@@ -2164,13 +2171,14 @@ impl IndexStore {
                 total_balance += coin_info.balance as i128;
                 coin_object_count += 1;
             }
-            let coin_type =
-                TypeTag::Struct(Box::new(parse_haneul_struct_tag(&coin_type).map_err(|e| {
+            let coin_type = TypeTag::Struct(Box::new(
+                parse_haneul_struct_tag(&coin_type).map_err(|e| {
                     HaneulErrorKind::ExecutionError(format!(
                         "Failed to parse event sender address: {:?}",
                         e
                     ))
-                })?));
+                })?,
+            ));
             balances.insert(
                 coin_type,
                 TotalBalance {
@@ -2230,7 +2238,12 @@ impl IndexStore {
 
     fn update_all_balance_cache(
         &self,
-        keys: impl IntoIterator<Item = (HaneulAddress, HaneulResult<Arc<HashMap<TypeTag, TotalBalance>>>)>,
+        keys: impl IntoIterator<
+            Item = (
+                HaneulAddress,
+                HaneulResult<Arc<HashMap<TypeTag, TotalBalance>>>,
+            ),
+        >,
     ) -> HaneulResult {
         self.caches
             .all_balances
@@ -2275,16 +2288,16 @@ impl IndexStore {
 mod tests {
     use super::IndexStore;
     use super::ObjectIndexChanges;
-    use move_core_types::account_address::AccountAddress;
-    use prometheus::Registry;
-    use std::collections::BTreeMap;
-    use std::env::temp_dir;
-    use haneul_types::base_types::{ObjectInfo, ObjectType, HaneulAddress};
+    use haneul_types::base_types::{HaneulAddress, ObjectInfo, ObjectType};
     use haneul_types::digests::TransactionDigest;
     use haneul_types::effects::TransactionEvents;
     use haneul_types::gas_coin::GAS;
     use haneul_types::object;
     use haneul_types::object::Owner;
+    use move_core_types::account_address::AccountAddress;
+    use prometheus::Registry;
+    use std::collections::BTreeMap;
+    use std::env::temp_dir;
 
     #[tokio::test]
     async fn test_index_cache() -> anyhow::Result<()> {

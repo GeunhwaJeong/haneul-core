@@ -124,13 +124,17 @@ pub fn get_authenticator_state(
     assert_eq!(outer.version, AUTHENTICATOR_STATE_VERSION);
 
     let id = outer.id.id.bytes;
-    let inner: AuthenticatorStateInner =
-        get_dynamic_field_from_store(&object_store, id, &outer.version).map_err(|err| {
-            HaneulErrorKind::DynamicFieldReadError(format!(
-                "Failed to load haneul system state inner object with ID {:?} and version {:?}: {:?}",
-                id, outer.version, err
-            ))
-        })?;
+    let inner: AuthenticatorStateInner = get_dynamic_field_from_store(
+        &object_store,
+        id,
+        &outer.version,
+    )
+    .map_err(|err| {
+        HaneulErrorKind::DynamicFieldReadError(format!(
+            "Failed to load haneul system state inner object with ID {:?} and version {:?}: {:?}",
+            id, outer.version, err
+        ))
+    })?;
 
     Ok(Some(inner))
 }

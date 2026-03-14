@@ -464,7 +464,10 @@ impl CertifiedTransactionEffects {
         )
     }
 
-    pub fn verify(self, committee: &Committee) -> HaneulResult<VerifiedCertifiedTransactionEffects> {
+    pub fn verify(
+        self,
+        committee: &Committee,
+    ) -> HaneulResult<VerifiedCertifiedTransactionEffects> {
         self.verify_authority_signatures(committee)?;
         Ok(VerifiedCertifiedTransactionEffects::new_from_verified(self))
     }

@@ -7,12 +7,12 @@ use consensus_config::{
     AuthorityIndex, Committee, NetworkKeyPair, NetworkPublicKey, Parameters, ProtocolKeyPair,
 };
 use consensus_types::block::Round;
-use itertools::Itertools;
+use haneul_protocol_config::ProtocolConfig;
 use haneullabs_metrics::spawn_logged_monitored_task;
 use haneullabs_network::Multiaddr;
+use itertools::Itertools;
 use parking_lot::RwLock;
 use prometheus::Registry;
-use haneul_protocol_config::ProtocolConfig;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
 
@@ -470,11 +470,11 @@ mod tests {
     };
 
     use consensus_config::{Parameters, local_committee_and_keys};
+    use haneul_protocol_config::ProtocolConfig;
     use haneullabs_metrics::RegistryService;
     use haneullabs_metrics::monitored_mpsc::UnboundedReceiver;
     use prometheus::Registry;
     use rstest::rstest;
-    use haneul_protocol_config::ProtocolConfig;
     use tempfile::TempDir;
     use tokio::time::{sleep, timeout};
     use typed_store::DBMetrics;

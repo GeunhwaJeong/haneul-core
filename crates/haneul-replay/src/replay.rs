@@ -13,18 +13,6 @@ use crate::{
     types::*,
 };
 use futures::executor::block_on;
-use move_binary_format::CompiledModule;
-use move_bytecode_utils::module_cache::GetModule;
-use move_core_types::{language_storage::ModuleId, resolver::ModuleResolver};
-use prometheus::Registry;
-use serde::{Deserialize, Serialize};
-use similar::{ChangeTag, TextDiff};
-use std::{
-    collections::{BTreeMap, HashSet},
-    path::PathBuf,
-    sync::Arc,
-    sync::Mutex,
-};
 use haneul_config::node::ExpensiveSafetyCheckConfig;
 use haneul_core::authority::NodeStateDump;
 use haneul_execution::Executor;
@@ -61,6 +49,18 @@ use haneul_types::{
         CheckedInputObjects, InputObjectKind, InputObjects, ObjectReadResult, ObjectReadResultKind,
         SenderSignedData, Transaction, TransactionDataAPI, TransactionKind, VerifiedTransaction,
     },
+};
+use move_binary_format::CompiledModule;
+use move_bytecode_utils::module_cache::GetModule;
+use move_core_types::{language_storage::ModuleId, resolver::ModuleResolver};
+use prometheus::Registry;
+use serde::{Deserialize, Serialize};
+use similar::{ChangeTag, TextDiff};
+use std::{
+    collections::{BTreeMap, HashSet},
+    path::PathBuf,
+    sync::Arc,
+    sync::Mutex,
 };
 use tracing::{error, info, trace, warn};
 

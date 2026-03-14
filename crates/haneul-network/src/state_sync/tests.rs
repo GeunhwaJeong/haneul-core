@@ -10,9 +10,6 @@ use crate::{
 };
 use anemo::{PeerId, Request};
 use anyhow::anyhow;
-use std::io::Write;
-use std::num::NonZeroUsize;
-use std::{collections::HashMap, time::Duration};
 use haneul_config::node::ArchiveReaderConfig;
 use haneul_config::object_storage_config::ObjectStoreConfig;
 use haneul_config::p2p::StateSyncConfig;
@@ -23,6 +20,9 @@ use haneul_types::{
     messages_checkpoint::CheckpointDigest,
     storage::{ReadStore, SharedInMemoryStore, WriteStore},
 };
+use std::io::Write;
+use std::num::NonZeroUsize;
+use std::{collections::HashMap, time::Duration};
 use tempfile::tempdir;
 use tokio::time::{Instant, timeout};
 

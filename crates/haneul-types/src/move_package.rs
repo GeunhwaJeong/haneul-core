@@ -11,6 +11,7 @@ use crate::{
     object::OBJECT_START_VERSION,
 };
 use fastcrypto::hash::HashFunction;
+use haneul_protocol_config::ProtocolConfig;
 use move_binary_format::binary_config::BinaryConfig;
 use move_binary_format::file_format::CompiledModule;
 use move_binary_format::file_format_common::VERSION_6;
@@ -29,7 +30,6 @@ use serde_with::Bytes;
 use serde_with::serde_as;
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::Hash;
-use haneul_protocol_config::ProtocolConfig;
 
 // TODO: robust MovePackage tests
 // #[cfg(test)]

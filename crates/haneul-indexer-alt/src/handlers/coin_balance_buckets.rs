@@ -16,8 +16,8 @@ use haneul_indexer_alt_framework::pipeline::Processor;
 use haneul_indexer_alt_framework::postgres::Connection;
 use haneul_indexer_alt_framework::postgres::handler::Handler;
 use haneul_indexer_alt_framework::types::TypeTag;
-use haneul_indexer_alt_framework::types::base_types::ObjectID;
 use haneul_indexer_alt_framework::types::base_types::HaneulAddress;
+use haneul_indexer_alt_framework::types::base_types::ObjectID;
 use haneul_indexer_alt_framework::types::full_checkpoint_content::Checkpoint;
 use haneul_indexer_alt_framework::types::object::Object;
 use haneul_indexer_alt_framework::types::object::Owner;
@@ -358,10 +358,10 @@ mod tests {
 
     use diesel::QueryDsl;
     use haneul_indexer_alt_framework::Indexer;
+    use haneul_indexer_alt_framework::types::base_types::HaneulAddress;
     use haneul_indexer_alt_framework::types::base_types::MoveObjectType;
     use haneul_indexer_alt_framework::types::base_types::ObjectID;
     use haneul_indexer_alt_framework::types::base_types::SequenceNumber;
-    use haneul_indexer_alt_framework::types::base_types::HaneulAddress;
     use haneul_indexer_alt_framework::types::base_types::dbg_addr;
     use haneul_indexer_alt_framework::types::digests::TransactionDigest;
     use haneul_indexer_alt_framework::types::gas_coin::GAS;

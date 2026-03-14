@@ -23,9 +23,6 @@ use crate::module_cache_metrics::ResolverMetrics;
 use crate::rpc_index::RpcIndexStore;
 use crate::signature_verifier::SignatureVerifierMetrics;
 use fastcrypto::traits::KeyPair;
-use prometheus::Registry;
-use std::path::PathBuf;
-use std::sync::Arc;
 use haneul_config::ExecutionCacheConfig;
 use haneul_config::certificate_deny_config::CertificateDenyConfig;
 use haneul_config::genesis::Genesis;
@@ -43,10 +40,13 @@ use haneul_types::base_types::{AuthorityName, ObjectID};
 use haneul_types::crypto::AuthorityKeyPair;
 use haneul_types::digests::ChainIdentifier;
 use haneul_types::executable_transaction::VerifiedExecutableTransaction;
-use haneul_types::object::Object;
 use haneul_types::haneul_system_state::HaneulSystemStateTrait;
+use haneul_types::object::Object;
 use haneul_types::supported_protocol_versions::SupportedProtocolVersions;
 use haneul_types::transaction::VerifiedTransaction;
+use prometheus::Registry;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Default, Clone)]
 pub struct TestAuthorityBuilder<'a> {

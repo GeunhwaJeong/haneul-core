@@ -12,14 +12,14 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use prometheus::Registry;
-use serde::Deserialize;
-use serde::Serialize;
 use haneul_indexer_alt_framework::Indexer;
 use haneul_indexer_alt_framework::IndexerArgs;
 use haneul_indexer_alt_framework::ingestion::ClientArgs;
 use haneul_indexer_alt_framework::pipeline::CommitterConfig;
 use haneul_indexer_alt_framework::pipeline::concurrent::ConcurrentConfig;
+use prometheus::Registry;
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::rate_limiter::CompositeRateLimiter;
 use crate::rate_limiter::RateLimiter;

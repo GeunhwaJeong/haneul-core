@@ -2,19 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use futures::{StreamExt, future::join_all};
-use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
-use haneullabs_common::fatal;
-use rand::{distributions::*, rngs::OsRng, seq::SliceRandom};
-use std::net::SocketAddr;
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use haneul_config::genesis::Genesis;
 use haneul_config::node::FundsWithdrawSchedulerType;
 use haneul_config::node::{AuthorityOverloadConfig, DBCheckpointConfig, RunWithRange};
 use haneul_config::{Config, ExecutionCacheConfig, HANEUL_CLIENT_CONFIG, HANEUL_NETWORK_CONFIG};
-use haneul_config::{NodeConfig, PersistedConfig, HANEUL_KEYSTORE_FILENAME};
+use haneul_config::{HANEUL_KEYSTORE_FILENAME, NodeConfig, PersistedConfig};
 use haneul_core::authority_aggregator::AuthorityAggregator;
 use haneul_core::authority_client::NetworkAuthorityClient;
 use haneul_json_rpc_types::{HaneulTransactionBlockEffectsAPI, TransactionFilter};
@@ -38,26 +30,36 @@ use haneul_swarm_config::network_config_builder::{
 use haneul_swarm_config::node_config_builder::{FullnodeConfigBuilder, ValidatorConfigBuilder};
 use haneul_test_transaction_builder::TestTransactionBuilder;
 use haneul_types::base_types::ConciseableName;
-use haneul_types::base_types::{AuthorityName, ObjectID, ObjectRef, HaneulAddress};
+use haneul_types::base_types::{AuthorityName, HaneulAddress, ObjectID, ObjectRef};
 use haneul_types::committee::CommitteeTrait;
 use haneul_types::committee::{Committee, EpochId};
-use haneul_types::crypto::KeypairTraits;
 use haneul_types::crypto::HaneulKeyPair;
+use haneul_types::crypto::KeypairTraits;
 use haneul_types::digests::{ChainIdentifier, TransactionDigest};
 use haneul_types::effects::TransactionEffectsAPI;
 use haneul_types::effects::{TransactionEffects, TransactionEvents};
 use haneul_types::error::HaneulResult;
+use haneul_types::haneul_system_state::HaneulSystemState;
+use haneul_types::haneul_system_state::HaneulSystemStateTrait;
+use haneul_types::haneul_system_state::epoch_start_haneul_system_state::EpochStartSystemStateTrait;
 use haneul_types::messages_grpc::{
     RawSubmitTxRequest, SubmitTxRequest, SubmitTxResult, SubmitTxType, WaitForEffectsRequest,
     WaitForEffectsResponse,
 };
 use haneul_types::object::Object;
-use haneul_types::haneul_system_state::HaneulSystemState;
-use haneul_types::haneul_system_state::HaneulSystemStateTrait;
-use haneul_types::haneul_system_state::epoch_start_haneul_system_state::EpochStartSystemStateTrait;
 use haneul_types::supported_protocol_versions::SupportedProtocolVersions;
 use haneul_types::traffic_control::{PolicyConfig, RemoteFirewallConfig};
-use haneul_types::transaction::{Transaction, TransactionData, TransactionDataAPI, TransactionKind};
+use haneul_types::transaction::{
+    Transaction, TransactionData, TransactionDataAPI, TransactionKind,
+};
+use haneullabs_common::fatal;
+use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
+use rand::{distributions::*, rngs::OsRng, seq::SliceRandom};
+use std::net::SocketAddr;
+use std::num::NonZeroUsize;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::time::{Instant, timeout};
 use tokio::{task::JoinHandle, time::sleep};
@@ -83,7 +85,10 @@ impl FullNodeHandle {
         let rpc_url = format!("http://{}", json_rpc_address);
         let rpc_client = HttpClientBuilder::default().build(&rpc_url).unwrap();
 
-        let haneul_client = HaneulClientBuilder::default().build(&rpc_url).await.unwrap();
+        let haneul_client = HaneulClientBuilder::default()
+            .build(&rpc_url)
+            .await
+            .unwrap();
         let grpc_client = Client::new(&rpc_url).unwrap();
 
         Self {
@@ -532,25 +537,29 @@ impl TestCluster {
     pub async fn wait_for_authenticator_state_update(&self) {
         timeout(
             Duration::from_secs(60),
-            self.fullnode_handle.haneul_node.with_async(|node| async move {
-                let mut txns = node.state().subscription_handler.subscribe_transactions(
-                    TransactionFilter::ChangedObject(ObjectID::from_hex_literal("0x7").unwrap()),
-                );
-                let state = node.state();
+            self.fullnode_handle
+                .haneul_node
+                .with_async(|node| async move {
+                    let mut txns = node.state().subscription_handler.subscribe_transactions(
+                        TransactionFilter::ChangedObject(
+                            ObjectID::from_hex_literal("0x7").unwrap(),
+                        ),
+                    );
+                    let state = node.state();
 
-                while let Some(tx) = txns.next().await {
-                    let digest = *tx.transaction_digest();
-                    let tx = state
-                        .get_transaction_cache_reader()
-                        .get_transaction_block(&digest)
-                        .unwrap();
-                    match &tx.data().intent_message().value.kind() {
-                        TransactionKind::EndOfEpochTransaction(_) => (),
-                        TransactionKind::AuthenticatorStateUpdate(_) => break,
-                        _ => panic!("{:?}", tx),
+                    while let Some(tx) = txns.next().await {
+                        let digest = *tx.transaction_digest();
+                        let tx = state
+                            .get_transaction_cache_reader()
+                            .get_transaction_block(&digest)
+                            .unwrap();
+                        match &tx.data().intent_message().value.kind() {
+                            TransactionKind::EndOfEpochTransaction(_) => (),
+                            TransactionKind::AuthenticatorStateUpdate(_) => break,
+                            _ => panic!("{:?}", tx),
+                        }
                     }
-                }
-            }),
+                }),
         )
         .await
         .expect("Timed out waiting for authenticator state update");

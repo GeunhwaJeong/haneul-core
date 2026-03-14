@@ -5,13 +5,13 @@ use std::convert::TryFrom;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 
+use haneullabs_common::debug_fatal;
 use move_binary_format::CompiledModule;
 use move_bytecode_utils::layout::TypeLayoutBuilder;
 use move_bytecode_utils::module_cache::GetModule;
 use move_core_types::annotated_value::{MoveStruct, MoveStructLayout, MoveTypeLayout, MoveValue};
 use move_core_types::language_storage::StructTag;
 use move_core_types::language_storage::TypeTag;
-use haneullabs_common::debug_fatal;
 use once_cell::sync::Lazy;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -32,7 +32,7 @@ use crate::layout_resolver::LayoutResolver;
 use crate::move_package::MovePackage;
 use crate::{
     base_types::{
-        ObjectDigest, ObjectID, ObjectRef, SequenceNumber, HaneulAddress, TransactionDigest,
+        HaneulAddress, ObjectDigest, ObjectID, ObjectRef, SequenceNumber, TransactionDigest,
     },
     gas_coin::GasCoin,
 };
@@ -383,7 +383,10 @@ impl MoveObject {
     }
 
     /// Get the total amount of HANEUL embedded in `self`. Intended for testing purposes
-    pub fn get_total_haneul(&self, layout_resolver: &mut dyn LayoutResolver) -> Result<u64, HaneulError> {
+    pub fn get_total_haneul(
+        &self,
+        layout_resolver: &mut dyn LayoutResolver,
+    ) -> Result<u64, HaneulError> {
         if self.type_.is_gas_coin() {
             let balance = self.get_coin_value_unsafe();
             Ok(balance)
@@ -530,7 +533,9 @@ impl Owner {
             Self::Shared { .. }
             | Self::Immutable
             | Self::ObjectOwner(_)
-            | Self::ConsensusAddressOwner { .. } => Err(HaneulErrorKind::UnexpectedOwnerType.into()),
+            | Self::ConsensusAddressOwner { .. } => {
+                Err(HaneulErrorKind::UnexpectedOwnerType.into())
+            }
         }
     }
 
@@ -542,7 +547,9 @@ impl Owner {
             Self::AddressOwner(address)
             | Self::ObjectOwner(address)
             | Self::ConsensusAddressOwner { owner: address, .. } => Ok(*address),
-            Self::Shared { .. } | Self::Immutable => Err(HaneulErrorKind::UnexpectedOwnerType.into()),
+            Self::Shared { .. } | Self::Immutable => {
+                Err(HaneulErrorKind::UnexpectedOwnerType.into())
+            }
         }
     }
 
@@ -1007,7 +1014,10 @@ impl ObjectInner {
 // Testing-related APIs.
 impl Object {
     /// Get the total amount of HANEUL embedded in `self`, including both Move objects and the storage rebate
-    pub fn get_total_haneul(&self, layout_resolver: &mut dyn LayoutResolver) -> Result<u64, HaneulError> {
+    pub fn get_total_haneul(
+        &self,
+        layout_resolver: &mut dyn LayoutResolver,
+    ) -> Result<u64, HaneulError> {
         Ok(self.storage_rebate
             + match &self.data {
                 Data::Move(m) => m.get_total_haneul(layout_resolver)?,
@@ -1320,7 +1330,7 @@ impl Display for PastObjectRead {
 mod tests {
     use crate::object::{OBJECT_START_VERSION, Object, Owner};
     use crate::{
-        base_types::{ObjectID, HaneulAddress, TransactionDigest},
+        base_types::{HaneulAddress, ObjectID, TransactionDigest},
         gas_coin::GasCoin,
     };
 

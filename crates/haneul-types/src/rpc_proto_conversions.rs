@@ -725,7 +725,9 @@ impl From<crate::collection_types::TableVec> for MoveTable {
     }
 }
 
-impl From<crate::haneul_system_state::haneul_system_state_inner_v1::StakeSubsidyV1> for StakeSubsidy {
+impl From<crate::haneul_system_state::haneul_system_state_inner_v1::StakeSubsidyV1>
+    for StakeSubsidy
+{
     fn from(
         crate::haneul_system_state::haneul_system_state_inner_v1::StakeSubsidyV1 {
             balance,
@@ -820,7 +822,9 @@ impl From<crate::haneul_system_state::haneul_system_state_inner_v1::StorageFundV
     }
 }
 
-impl From<crate::haneul_system_state::haneul_system_state_inner_v1::ValidatorSetV1> for ValidatorSet {
+impl From<crate::haneul_system_state::haneul_system_state_inner_v1::ValidatorSetV1>
+    for ValidatorSet
+{
     fn from(
         crate::haneul_system_state::haneul_system_state_inner_v1::ValidatorSetV1 {
             total_stake,
@@ -2402,7 +2406,9 @@ impl From<crate::messages_consensus::ConsensusCommitPrologueV4> for ConsensusCom
         let mut message = Self::default();
         message.epoch = Some(epoch);
         message.round = Some(round);
-        message.commit_timestamp = Some(haneul_rpc::proto::timestamp_ms_to_proto(commit_timestamp_ms));
+        message.commit_timestamp = Some(haneul_rpc::proto::timestamp_ms_to_proto(
+            commit_timestamp_ms,
+        ));
         message.consensus_commit_digest = Some(consensus_commit_digest.to_string());
         message.sub_dag_index = sub_dag_index;
         message.consensus_determined_version_assignments =

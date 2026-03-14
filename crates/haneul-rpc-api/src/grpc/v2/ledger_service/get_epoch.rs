@@ -4,7 +4,6 @@
 use crate::ErrorReason;
 use crate::Result;
 use crate::RpcService;
-use prost_types::FieldMask;
 use haneul_protocol_config::ProtocolConfigValue;
 use haneul_rpc::field::FieldMaskTree;
 use haneul_rpc::field::FieldMaskUtil;
@@ -17,6 +16,7 @@ use haneul_rpc::proto::haneul::rpc::v2::ProtocolConfig;
 use haneul_rpc::proto::timestamp_ms_to_proto;
 use haneul_sdk_types::EpochId;
 use haneul_types::haneul_system_state::HaneulSystemStateTrait;
+use prost_types::FieldMask;
 
 pub const READ_MASK_DEFAULT: &str = "epoch,first_checkpoint,last_checkpoint,start,end,reference_gas_price,protocol_config.protocol_version";
 

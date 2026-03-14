@@ -5,7 +5,6 @@ use crate::ErrorReason;
 use crate::RpcError;
 use crate::RpcService;
 use crate::error::ObjectNotFoundError;
-use prost_types::FieldMask;
 use haneul_rpc::field::FieldMaskTree;
 use haneul_rpc::field::FieldMaskUtil;
 use haneul_rpc::proto::google::rpc::bad_request::FieldViolation;
@@ -16,6 +15,7 @@ use haneul_rpc::proto::haneul::rpc::v2::GetObjectResponse;
 use haneul_rpc::proto::haneul::rpc::v2::GetObjectResult;
 use haneul_rpc::proto::haneul::rpc::v2::Object;
 use haneul_sdk_types::Address;
+use prost_types::FieldMask;
 
 pub const MAX_BATCH_REQUESTS: usize = 1000;
 pub const READ_MASK_DEFAULT: &str = "object_id,version,digest";

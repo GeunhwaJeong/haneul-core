@@ -1,10 +1,6 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use itertools::Itertools;
-use move_core_types::language_storage::StructTag;
-use std::str::FromStr;
-use std::time::Duration;
 use haneul_keys::keystore::AccountKeystore;
 use haneul_light_client::authenticated_events::mmr::apply_stream_updates;
 use haneul_light_client::proof::base::{Proof, ProofContents, ProofTarget, ProofVerifier};
@@ -25,14 +21,20 @@ use haneul_rpc_api::grpc::alpha::proof_service_proto::proof_service_client::Proo
 use haneul_sdk_types::ValidatorCommittee;
 use haneul_types::accumulator_root as ar;
 use haneul_types::accumulator_root::EventCommitment;
-use haneul_types::base_types::{ObjectID, SequenceNumber, HaneulAddress};
+use haneul_types::base_types::{HaneulAddress, ObjectID, SequenceNumber};
 use haneul_types::committee::Committee;
 use haneul_types::digests::{Digest, ObjectDigest};
 use haneul_types::dynamic_field::{DynamicFieldKey, Field};
 use haneul_types::object::Object;
 use haneul_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use haneul_types::transaction::TransactionData;
-use haneul_types::{MoveTypeTagTraitGeneric, HANEUL_ACCUMULATOR_ROOT_OBJECT_ID, HANEUL_FRAMEWORK_ADDRESS};
+use haneul_types::{
+    HANEUL_ACCUMULATOR_ROOT_OBJECT_ID, HANEUL_FRAMEWORK_ADDRESS, MoveTypeTagTraitGeneric,
+};
+use itertools::Itertools;
+use move_core_types::language_storage::StructTag;
+use std::str::FromStr;
+use std::time::Duration;
 use test_cluster::{TestCluster, TestClusterBuilder};
 
 fn create_rpc_config_with_authenticated_events() -> haneul_config::RpcConfig {
@@ -1239,7 +1241,9 @@ async fn authenticated_events_multiple_commits_per_checkpoint() {
         vec![coin, recipient_arg],
     );
     let deposit_tx = TransactionData::new(
-        haneul_types::transaction::TransactionKind::ProgrammableTransaction(deposit_builder.finish()),
+        haneul_types::transaction::TransactionKind::ProgrammableTransaction(
+            deposit_builder.finish(),
+        ),
         sender,
         gas_for_deposit,
         10_000_000,
@@ -1261,26 +1265,28 @@ async fn authenticated_events_multiple_commits_per_checkpoint() {
                 vec![val],
             );
 
-            haneul_types::transaction::TransactionData::V1(haneul_types::transaction::TransactionDataV1 {
-                kind: haneul_types::transaction::TransactionKind::ProgrammableTransaction(
-                    ptb.finish(),
-                ),
-                sender,
-                gas_data: haneul_types::transaction::GasData {
-                    payment: vec![],
-                    owner: sender,
-                    price: rgp,
-                    budget: 50_000_000_000,
+            haneul_types::transaction::TransactionData::V1(
+                haneul_types::transaction::TransactionDataV1 {
+                    kind: haneul_types::transaction::TransactionKind::ProgrammableTransaction(
+                        ptb.finish(),
+                    ),
+                    sender,
+                    gas_data: haneul_types::transaction::GasData {
+                        payment: vec![],
+                        owner: sender,
+                        price: rgp,
+                        budget: 50_000_000_000,
+                    },
+                    expiration: haneul_types::transaction::TransactionExpiration::ValidDuring {
+                        min_epoch: Some(0),
+                        max_epoch: Some(0),
+                        min_timestamp: None,
+                        max_timestamp: None,
+                        chain: chain_id,
+                        nonce: i,
+                    },
                 },
-                expiration: haneul_types::transaction::TransactionExpiration::ValidDuring {
-                    min_epoch: Some(0),
-                    max_epoch: Some(0),
-                    min_timestamp: None,
-                    max_timestamp: None,
-                    chain: chain_id,
-                    nonce: i,
-                },
-            })
+            )
         })
         .collect();
 

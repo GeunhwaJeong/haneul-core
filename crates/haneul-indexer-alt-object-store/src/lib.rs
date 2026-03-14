@@ -8,6 +8,11 @@ use anyhow::Context;
 use anyhow::bail;
 use async_trait::async_trait;
 use bytes::Bytes;
+use haneul_indexer_alt_framework_store_traits::Connection;
+use haneul_indexer_alt_framework_store_traits::PrunerWatermark;
+use haneul_indexer_alt_framework_store_traits::ReaderWatermark;
+use haneul_indexer_alt_framework_store_traits::Store;
+use haneul_indexer_alt_framework_store_traits::{self as framework_traits};
 use object_store::Error as ObjectStoreError;
 use object_store::ObjectStoreExt as _;
 use object_store::PutMode;
@@ -15,11 +20,6 @@ use object_store::PutPayload;
 use object_store::path::Path as ObjectPath;
 use serde::Deserialize;
 use serde::Serialize;
-use haneul_indexer_alt_framework_store_traits::Connection;
-use haneul_indexer_alt_framework_store_traits::PrunerWatermark;
-use haneul_indexer_alt_framework_store_traits::ReaderWatermark;
-use haneul_indexer_alt_framework_store_traits::Store;
-use haneul_indexer_alt_framework_store_traits::{self as framework_traits};
 use tracing::info;
 
 #[derive(Clone)]

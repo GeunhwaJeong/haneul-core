@@ -9,8 +9,8 @@ use crate::{
 use anemo::Result;
 use fastcrypto::ed25519::Ed25519PublicKey;
 use futures::stream::FuturesUnordered;
-use std::collections::HashSet;
 use haneul_config::p2p::{AllowlistedPeer, SeedPeer};
+use std::collections::HashSet;
 use tokio::time::timeout;
 
 #[tokio::test]

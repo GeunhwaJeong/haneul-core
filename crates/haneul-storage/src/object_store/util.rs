@@ -431,10 +431,10 @@ mod tests {
     use crate::object_store::util::{
         MANIFEST_FILENAME, copy_recursively, delete_recursively, write_snapshot_manifest,
     };
+    use haneul_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
     use object_store::path::Path;
     use std::fs;
     use std::num::NonZeroUsize;
-    use haneul_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
     use tempfile::TempDir;
 
     #[tokio::test]

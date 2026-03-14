@@ -9,7 +9,6 @@ use std::sync::Arc;
 
 use async_graphql::Context;
 use async_trait::async_trait;
-use move_core_types::account_address::AccountAddress;
 use haneul_indexer_alt_reader::package_resolver::PackageCache;
 use haneul_package_resolver::Package;
 use haneul_package_resolver::PackageStore;
@@ -20,6 +19,7 @@ use haneul_rpc::proto::haneul::rpc::v2::changed_object::OutputObjectState;
 use haneul_types::base_types::ObjectID;
 use haneul_types::base_types::SequenceNumber;
 use haneul_types::object::Object as NativeObject;
+use move_core_types::account_address::AccountAddress;
 
 use crate::config::Limits;
 use crate::error::RpcError;

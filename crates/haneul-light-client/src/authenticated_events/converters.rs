@@ -3,9 +3,9 @@
 
 use crate::authenticated_events::ClientError;
 use crate::proof::ocs::OCSInclusionProof;
-use std::str::FromStr;
 use haneul_rpc_api::grpc::alpha::proof_service_proto::OcsInclusionProof as ProtoOcsInclusionProof;
 use haneul_types::base_types::ObjectID;
+use std::str::FromStr;
 
 pub(super) fn proto_object_ref_to_haneul_object_ref(
     proto: &haneul_rpc::proto::haneul::rpc::v2::ObjectReference,

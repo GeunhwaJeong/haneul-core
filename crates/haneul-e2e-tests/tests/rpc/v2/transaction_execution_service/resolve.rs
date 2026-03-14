@@ -1,8 +1,6 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use prost_types::FieldMask;
-use shared_crypto::intent::Intent;
 use haneul_keys::keystore::AccountKeystore;
 use haneul_macros::sim_test;
 use haneul_rpc::proto::haneul::rpc::v2::Argument;
@@ -27,6 +25,8 @@ use haneul_types::effects::TransactionEffectsAPI;
 use haneul_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use haneul_types::transaction::Command as HaneulCommand;
 use haneul_types::transaction::{ObjectArg, TransactionData, TransactionDataAPI};
+use prost_types::FieldMask;
+use shared_crypto::intent::Intent;
 use test_cluster::TestClusterBuilder;
 
 fn proto_to_response(
@@ -193,8 +193,10 @@ async fn resolve_transaction_transfer_with_sponsor() {
         .await
         .unwrap();
 
-    let signed_transaction =
-        haneul_types::transaction::Transaction::from_data(transaction, vec![sender_sig, sponsor_sig]);
+    let signed_transaction = haneul_types::transaction::Transaction::from_data(
+        transaction,
+        vec![sender_sig, sponsor_sig],
+    );
     let effects = client
         .execute_transaction(&signed_transaction)
         .await
@@ -701,11 +703,12 @@ async fn resolve_transaction_shared_object_with_generic_type_parameter() {
 
 #[sim_test]
 async fn test_gas_selection_with_address_balance() {
-    let _guard = haneul_protocol_config::ProtocolConfig::apply_overrides_for_testing(|_, mut cfg| {
-        cfg.create_root_accumulator_object_for_testing();
-        cfg.enable_accumulators_for_testing();
-        cfg
-    });
+    let _guard =
+        haneul_protocol_config::ProtocolConfig::apply_overrides_for_testing(|_, mut cfg| {
+            cfg.create_root_accumulator_object_for_testing();
+            cfg.enable_accumulators_for_testing();
+            cfg
+        });
 
     let test_cluster = TestClusterBuilder::new()
         .with_num_validators(1)

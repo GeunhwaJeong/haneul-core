@@ -5,13 +5,13 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use move_core_types::annotated_value::MoveValue;
 use haneul_indexer_alt_framework::pipeline::Processor;
 use haneul_json_rpc_types::type_and_fields_from_move_event_data;
 use haneul_types::base_types::EpochId;
 use haneul_types::effects::TransactionEffectsAPI;
 use haneul_types::event::Event;
 use haneul_types::full_checkpoint_content::Checkpoint;
+use move_core_types::annotated_value::MoveValue;
 
 use crate::Row;
 use crate::package_store::PackageCache;

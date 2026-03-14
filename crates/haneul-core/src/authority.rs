@@ -29,12 +29,38 @@ use dashmap::DashMap;
 use fastcrypto::encoding::Base58;
 use fastcrypto::encoding::Encoding;
 use fastcrypto::hash::MultisetHash;
+use haneul_config::NodeConfig;
+use haneul_config::node::{AuthorityOverloadConfig, StateDebugDumpConfig};
+use haneul_protocol_config::PerObjectCongestionControlMode;
+use haneul_types::crypto::RandomnessRound;
+use haneul_types::dynamic_field::visitor as DFV;
+use haneul_types::execution::ExecutionOutput;
+use haneul_types::execution::ExecutionTimeObservationKey;
+use haneul_types::execution::ExecutionTiming;
+use haneul_types::execution_params::ExecutionOrEarlyError;
+use haneul_types::execution_params::FundsWithdrawStatus;
+use haneul_types::execution_params::get_early_execution_error;
+use haneul_types::execution_status::ExecutionStatus;
+use haneul_types::inner_temporary_store::PackageStoreWithFallback;
+use haneul_types::layout_resolver::LayoutResolver;
+use haneul_types::layout_resolver::into_struct_layout;
+use haneul_types::messages_consensus::AuthorityCapabilitiesV2;
+use haneul_types::object::bounded_visitor::BoundedVisitor;
+use haneul_types::storage::ChildObjectResolver;
+use haneul_types::storage::InputKey;
+use haneul_types::storage::TrackingBackingStore;
+use haneul_types::traffic_control::{
+    PolicyConfig, RemoteFirewallConfig, TrafficControlReconfigParams,
+};
+use haneul_types::transaction_executor::SimulateTransactionResult;
+use haneul_types::transaction_executor::TransactionChecks;
+use haneul_types::{HANEUL_ACCUMULATOR_ROOT_OBJECT_ID, accumulator_metadata};
+use haneullabs_common::{assert_reachable, fatal};
 use itertools::Itertools;
 use move_binary_format::CompiledModule;
 use move_binary_format::binary_config::BinaryConfig;
 use move_core_types::annotated_value::MoveStructLayout;
 use move_core_types::language_storage::ModuleId;
-use haneullabs_common::{assert_reachable, fatal};
 use parking_lot::Mutex;
 use prometheus::{
     Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec, Registry,
@@ -64,32 +90,6 @@ use std::{
     sync::Arc,
     vec,
 };
-use haneul_config::NodeConfig;
-use haneul_config::node::{AuthorityOverloadConfig, StateDebugDumpConfig};
-use haneul_protocol_config::PerObjectCongestionControlMode;
-use haneul_types::crypto::RandomnessRound;
-use haneul_types::dynamic_field::visitor as DFV;
-use haneul_types::execution::ExecutionOutput;
-use haneul_types::execution::ExecutionTimeObservationKey;
-use haneul_types::execution::ExecutionTiming;
-use haneul_types::execution_params::ExecutionOrEarlyError;
-use haneul_types::execution_params::FundsWithdrawStatus;
-use haneul_types::execution_params::get_early_execution_error;
-use haneul_types::execution_status::ExecutionStatus;
-use haneul_types::inner_temporary_store::PackageStoreWithFallback;
-use haneul_types::layout_resolver::LayoutResolver;
-use haneul_types::layout_resolver::into_struct_layout;
-use haneul_types::messages_consensus::AuthorityCapabilitiesV2;
-use haneul_types::object::bounded_visitor::BoundedVisitor;
-use haneul_types::storage::ChildObjectResolver;
-use haneul_types::storage::InputKey;
-use haneul_types::storage::TrackingBackingStore;
-use haneul_types::traffic_control::{
-    PolicyConfig, RemoteFirewallConfig, TrafficControlReconfigParams,
-};
-use haneul_types::transaction_executor::SimulateTransactionResult;
-use haneul_types::transaction_executor::TransactionChecks;
-use haneul_types::{HANEUL_ACCUMULATOR_ROOT_OBJECT_ID, accumulator_metadata};
 use tap::TapFallible;
 use tokio::sync::RwLock;
 use tokio::sync::mpsc::unbounded_channel;
@@ -108,8 +108,6 @@ use crate::jsonrpc_index::IndexStore;
 use crate::jsonrpc_index::{
     CoinInfo, IndexStoreCacheUpdates, IndexStoreCacheUpdatesWithLocks, ObjectIndexChanges,
 };
-use haneullabs_common::debug_fatal;
-use shared_crypto::intent::{AppId, Intent, IntentMessage, IntentScope, IntentVersion};
 use haneul_config::genesis::Genesis;
 use haneul_config::node::{DBCheckpointConfig, ExpensiveSafetyCheckConfig};
 use haneul_framework::{BuiltInFramework, SystemPackage};
@@ -135,6 +133,9 @@ use haneul_types::error::{ExecutionError, ExecutionErrorKind, HaneulErrorKind, U
 use haneul_types::event::{Event, EventID};
 use haneul_types::executable_transaction::VerifiedExecutableTransaction;
 use haneul_types::gas::{GasCostSummary, HaneulGasStatus};
+use haneul_types::haneul_system_state::HaneulSystemStateTrait;
+use haneul_types::haneul_system_state::epoch_start_haneul_system_state::EpochStartSystemStateTrait;
+use haneul_types::haneul_system_state::{HaneulSystemState, get_haneul_system_state};
 use haneul_types::inner_temporary_store::{
     InnerTemporaryStore, ObjectMap, TemporaryModuleResolver, TxCoins, WrittenObjects,
 };
@@ -154,9 +155,6 @@ use haneul_types::object::{MoveObject, OBJECT_START_VERSION, Owner, PastObjectRe
 use haneul_types::storage::{
     BackingPackageStore, BackingStore, ObjectKey, ObjectOrTombstone, ObjectStore, WriteKind,
 };
-use haneul_types::haneul_system_state::HaneulSystemStateTrait;
-use haneul_types::haneul_system_state::epoch_start_haneul_system_state::EpochStartSystemStateTrait;
-use haneul_types::haneul_system_state::{HaneulSystemState, get_haneul_system_state};
 use haneul_types::supported_protocol_versions::{ProtocolConfig, SupportedProtocolVersions};
 use haneul_types::{
     HANEUL_SYSTEM_ADDRESS,
@@ -168,6 +166,8 @@ use haneul_types::{
     transaction::*,
 };
 use haneul_types::{TypeTag, is_system_package};
+use haneullabs_common::debug_fatal;
+use shared_crypto::intent::{AppId, Intent, IntentMessage, IntentScope, IntentVersion};
 use typed_store::TypedStoreError;
 use typed_store::rocks::StagedBatch;
 
@@ -841,7 +841,9 @@ impl Default for ForkRecoveryState {
 }
 
 impl ForkRecoveryState {
-    pub fn new(config: Option<&haneul_config::node::ForkRecoveryConfig>) -> Result<Self, HaneulError> {
+    pub fn new(
+        config: Option<&haneul_config::node::ForkRecoveryConfig>,
+    ) -> Result<Self, HaneulError> {
         let Some(config) = config else {
             return Ok(Self::default());
         };
@@ -853,7 +855,10 @@ impl ForkRecoveryState {
             })?;
             let effects_digest =
                 TransactionEffectsDigest::from_str(effects_digest_str).map_err(|_| {
-                    HaneulErrorKind::Unknown(format!("Invalid effects digest: {}", effects_digest_str))
+                    HaneulErrorKind::Unknown(format!(
+                        "Invalid effects digest: {}",
+                        effects_digest_str
+                    ))
                 })?;
             transaction_overrides.insert(tx_digest, effects_digest);
         }
@@ -1021,15 +1026,16 @@ impl AuthorityState {
             epoch_store.epoch(),
         )?;
 
-        let (_gas_status, checked_input_objects) = haneul_transaction_checks::check_transaction_input(
-            epoch_store.protocol_config(),
-            epoch_store.reference_gas_price(),
-            tx_data,
-            input_objects,
-            &receiving_objects,
-            &self.metrics.bytecode_verifier_metrics,
-            &self.config.verifier_signing_config,
-        )?;
+        let (_gas_status, checked_input_objects) =
+            haneul_transaction_checks::check_transaction_input(
+                epoch_store.protocol_config(),
+                epoch_store.reference_gas_price(),
+                tx_data,
+                input_objects,
+                &receiving_objects,
+                &self.metrics.bytecode_verifier_metrics,
+                &self.config.verifier_signing_config,
+            )?;
 
         self.handle_coin_deny_list_checks(
             tx_data,
@@ -2043,7 +2049,9 @@ impl AuthorityState {
             fork_probability,
         ): (
             std::sync::Arc<
-                std::sync::Mutex<std::collections::HashSet<haneul_types::base_types::AuthorityName>>,
+                std::sync::Mutex<
+                    std::collections::HashSet<haneul_types::base_types::AuthorityName>,
+                >,
             >,
             bool,
             std::sync::Arc<std::sync::Mutex<std::collections::BTreeMap<String, String>>>,
@@ -4774,8 +4782,9 @@ impl AuthorityState {
         owner: ObjectID,
         // If `Some`, the query will start from the next item after the specified cursor
         cursor: Option<ObjectID>,
-    ) -> HaneulResult<impl Iterator<Item = Result<(ObjectID, DynamicFieldInfo), TypedStoreError>> + '_>
-    {
+    ) -> HaneulResult<
+        impl Iterator<Item = Result<(ObjectID, DynamicFieldInfo), TypedStoreError>> + '_,
+    > {
         if let Some(indexes) = &self.indexes {
             indexes.get_dynamic_fields_iterator(owner, cursor)
         } else {
@@ -4922,7 +4931,9 @@ impl AuthorityState {
     }
 
     #[cfg(msim)]
-    pub fn get_highest_pruned_checkpoint_for_testing(&self) -> HaneulResult<CheckpointSequenceNumber> {
+    pub fn get_highest_pruned_checkpoint_for_testing(
+        &self,
+    ) -> HaneulResult<CheckpointSequenceNumber> {
         self.database_for_testing()
             .perpetual_tables
             .get_highest_pruned_checkpoint()
@@ -6575,7 +6586,10 @@ impl TransactionKeyValueStoreTrait for AuthorityState {
     }
 
     #[instrument(skip_all)]
-    async fn multi_get_objects(&self, object_keys: &[ObjectKey]) -> HaneulResult<Vec<Option<Object>>> {
+    async fn multi_get_objects(
+        &self,
+        object_keys: &[ObjectKey],
+    ) -> HaneulResult<Vec<Option<Object>>> {
         Ok(self
             .get_object_cache_reader()
             .multi_get_objects_by_key(object_keys))
@@ -6613,12 +6627,12 @@ impl TransactionKeyValueStoreTrait for AuthorityState {
 
 #[cfg(msim)]
 pub mod framework_injection {
-    use move_binary_format::CompiledModule;
-    use std::collections::BTreeMap;
-    use std::{cell::RefCell, collections::BTreeSet};
     use haneul_framework::{BuiltInFramework, SystemPackage};
     use haneul_types::base_types::{AuthorityName, ObjectID};
     use haneul_types::is_system_package;
+    use move_binary_format::CompiledModule;
+    use std::collections::BTreeMap;
+    use std::{cell::RefCell, collections::BTreeSet};
 
     type FrameworkOverrideConfig = BTreeMap<ObjectID, PackageOverrideConfig>;
 

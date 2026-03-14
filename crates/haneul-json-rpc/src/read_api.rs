@@ -12,6 +12,12 @@ use backoff::future::retry;
 use fastcrypto::encoding::Base64;
 use fastcrypto_zkp::bn254::zk_login_api::ZkLoginEnv;
 use futures::future::join_all;
+use haneul_display::v1::Format;
+use haneul_json_rpc_types::ZkLoginIntentScope;
+use haneul_types::base_types::HaneulAddress;
+use haneul_types::signature::{GenericSignature, VerifyParams};
+use haneul_types::signature_verification::VerifiedDigestCache;
+use haneul_types::storage::ObjectKey;
 use im::hashmap::HashMap as ImHashMap;
 use indexmap::map::IndexMap;
 use itertools::Itertools;
@@ -22,16 +28,9 @@ use move_core_types::annotated_value::{MoveStructLayout, MoveTypeLayout};
 use move_core_types::language_storage::StructTag;
 use once_cell::sync::Lazy;
 use shared_crypto::intent::{IntentMessage, PersonalMessage};
-use haneul_display::v1::Format;
-use haneul_json_rpc_types::ZkLoginIntentScope;
-use haneul_types::base_types::HaneulAddress;
-use haneul_types::signature::{GenericSignature, VerifyParams};
-use haneul_types::signature_verification::VerifiedDigestCache;
-use haneul_types::storage::ObjectKey;
 use tap::TapFallible;
 use tracing::{debug, error, info, instrument, trace, warn};
 
-use haneullabs_metrics::add_server_timing;
 use haneul_core::authority::AuthorityState;
 use haneul_json_rpc_api::{
     JsonRpcMetrics, QUERY_MAX_RESULT_LIMIT, QUERY_MAX_RESULT_LIMIT_CHECKPOINTS, ReadApiOpenRpc,
@@ -39,9 +38,10 @@ use haneul_json_rpc_api::{
 };
 use haneul_json_rpc_types::{
     BalanceChange, Checkpoint, CheckpointId, CheckpointPage, DisplayFieldsResponse, EventFilter,
-    ObjectChange, ProtocolConfigResponse, HaneulEvent, HaneulGetPastObjectRequest, HaneulObjectDataOptions,
-    HaneulObjectResponse, HaneulPastObjectResponse, HaneulTransactionBlock, HaneulTransactionBlockEvents,
-    HaneulTransactionBlockResponse, HaneulTransactionBlockResponseOptions,
+    HaneulEvent, HaneulGetPastObjectRequest, HaneulObjectDataOptions, HaneulObjectResponse,
+    HaneulPastObjectResponse, HaneulTransactionBlock, HaneulTransactionBlockEvents,
+    HaneulTransactionBlockResponse, HaneulTransactionBlockResponseOptions, ObjectChange,
+    ProtocolConfigResponse,
 };
 use haneul_open_rpc::Module;
 use haneul_protocol_config::{ProtocolConfig, ProtocolVersion};
@@ -51,25 +51,26 @@ use haneul_types::crypto::AggregateAuthoritySignature;
 use haneul_types::display::DisplayVersionUpdatedEvent;
 use haneul_types::effects::{TransactionEffects, TransactionEffectsAPI, TransactionEvents};
 use haneul_types::error::{HaneulError, HaneulObjectResponseError};
+use haneul_types::haneul_serde::BigInt;
 use haneul_types::messages_checkpoint::{
     CheckpointContents, CheckpointSequenceNumber, CheckpointSummary, CheckpointTimestamp,
 };
 use haneul_types::object::{Object, ObjectRead, PastObjectRead};
-use haneul_types::haneul_serde::BigInt;
 use haneul_types::transaction::TransactionDataAPI;
 use haneul_types::transaction::{Transaction, TransactionData};
+use haneullabs_metrics::add_server_timing;
 
 use crate::authority_state::{StateRead, StateReadError, StateReadResult};
-use crate::error::{Error, RpcInterimResult, HaneulRpcInputError};
-use crate::{ObjectProvider, with_tracing};
+use crate::error::{Error, HaneulRpcInputError, RpcInterimResult};
 use crate::{
-    ObjectProviderCache, HaneulRpcModule, get_balance_changes_from_effect, get_object_changes,
+    HaneulRpcModule, ObjectProviderCache, get_balance_changes_from_effect, get_object_changes,
 };
+use crate::{ObjectProvider, with_tracing};
 use fastcrypto::encoding::Encoding;
 use fastcrypto::traits::ToFromBytes;
-use shared_crypto::intent::Intent;
 use haneul_json_rpc_types::ZkLoginVerifyResult;
 use haneul_types::authenticator_state::{ActiveJwk, get_authenticator_state};
+use shared_crypto::intent::Intent;
 
 /// A field access in a  Display string cannot exceed this level of nesting.
 const MAX_DISPLAY_NESTED_LEVEL: usize = 10;
@@ -922,7 +923,10 @@ impl ReadApiServer for ReadApi {
     }
 
     #[instrument(skip(self))]
-    async fn get_events(&self, transaction_digest: TransactionDigest) -> RpcResult<Vec<HaneulEvent>> {
+    async fn get_events(
+        &self,
+        transaction_digest: TransactionDigest,
+    ) -> RpcResult<Vec<HaneulEvent>> {
         with_tracing!(async move {
             let state = self.state.clone();
             let transaction_kv_store = self.transaction_kv_store.clone();

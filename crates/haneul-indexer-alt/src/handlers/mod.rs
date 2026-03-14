@@ -6,8 +6,8 @@ use std::collections::HashSet;
 use std::collections::btree_map::Entry;
 
 use anyhow::Context;
-use haneul_indexer_alt_framework::types::base_types::ObjectID;
 use haneul_indexer_alt_framework::types::base_types::HaneulAddress;
+use haneul_indexer_alt_framework::types::base_types::ObjectID;
 use haneul_indexer_alt_framework::types::effects::TransactionEffects;
 use haneul_indexer_alt_framework::types::effects::TransactionEffectsAPI;
 use haneul_indexer_alt_framework::types::full_checkpoint_content::Checkpoint;
@@ -96,7 +96,9 @@ pub(crate) fn checkpoint_input_objects(
 ///
 /// Returns addresses from `AddressOwner` and `ConsensusAddressOwner` owners,
 /// skipping other owner types.
-pub(crate) fn affected_addresses(effects: &TransactionEffects) -> impl Iterator<Item = HaneulAddress> {
+pub(crate) fn affected_addresses(
+    effects: &TransactionEffects,
+) -> impl Iterator<Item = HaneulAddress> {
     effects
         .all_changed_objects()
         .into_iter()

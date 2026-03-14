@@ -27,6 +27,7 @@ use crate::{
 };
 use backoff::backoff::Backoff;
 use fastcrypto::hash::{Digest, HashFunction};
+use haneul_macros::{fail_point, nondeterministic};
 use haneullabs_common::debug_fatal;
 use haneullabs_metrics::RegistryID;
 use prometheus::{Histogram, HistogramTimer};
@@ -47,7 +48,6 @@ use std::{
     time::Duration,
 };
 use std::{collections::HashSet, ffi::CStr};
-use haneul_macros::{fail_point, nondeterministic};
 #[cfg(tidehunter)]
 use tidehunter::{db::Db as TideHunterDb, key_shape::KeySpace};
 use tokio::sync::oneshot;
@@ -61,8 +61,9 @@ const ROCKSDB_PROPERTY_TOTAL_BLOB_FILES_SIZE: &CStr =
 static WRITE_SYNC_ENABLED: OnceLock<bool> = OnceLock::new();
 
 fn write_sync_enabled() -> bool {
-    *WRITE_SYNC_ENABLED
-        .get_or_init(|| std::env::var("HANEUL_DB_SYNC_TO_DISK").is_ok_and(|v| v == "1" || v == "true"))
+    *WRITE_SYNC_ENABLED.get_or_init(|| {
+        std::env::var("HANEUL_DB_SYNC_TO_DISK").is_ok_and(|v| v == "1" || v == "true")
+    })
 }
 
 /// Initialize the write sync setting from config.

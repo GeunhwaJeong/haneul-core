@@ -1,10 +1,10 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::HashMap;
 use haneul_crypto::Verifier;
 use haneul_sdk_types::Jwk;
 use haneul_sdk_types::JwkId;
+use std::collections::HashMap;
 use tap::Pipe;
 
 use crate::ErrorReason;
@@ -175,7 +175,9 @@ fn verify_signature(
     };
 
     let mut zklogin_verifier = match service.chain_id().chain() {
-        haneul_protocol_config::Chain::Mainnet => haneul_crypto::zklogin::ZkloginVerifier::new_mainnet(),
+        haneul_protocol_config::Chain::Mainnet => {
+            haneul_crypto::zklogin::ZkloginVerifier::new_mainnet()
+        }
         haneul_protocol_config::Chain::Testnet | haneul_protocol_config::Chain::Unknown => {
             haneul_crypto::zklogin::ZkloginVerifier::new_dev()
         }

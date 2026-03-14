@@ -7,8 +7,6 @@ use std::fmt::Write;
 use anyhow::Context as _;
 use anyhow::bail;
 use futures::future::OptionFuture;
-use move_core_types::annotated_value::MoveTypeLayout;
-use move_core_types::language_storage::StructTag;
 use haneul_display::v1::Format;
 use haneul_indexer_alt_reader::displays::DisplayKey;
 use haneul_json_rpc_types::DisplayFieldsResponse;
@@ -27,6 +25,8 @@ use haneul_types::display::DisplayVersionUpdatedEvent;
 use haneul_types::error::HaneulObjectResponseError;
 use haneul_types::object::Data;
 use haneul_types::object::Object;
+use move_core_types::annotated_value::MoveTypeLayout;
+use move_core_types::language_storage::StructTag;
 use tokio::join;
 
 use crate::context::Context;
@@ -70,7 +70,9 @@ pub(super) async fn past_object(
         .await
         .context("Failed to load object from store")?
     else {
-        return Ok(HaneulPastObjectResponse::VersionNotFound(object_id, version));
+        return Ok(HaneulPastObjectResponse::VersionNotFound(
+            object_id, version,
+        ));
     };
 
     Ok(HaneulPastObjectResponse::VersionFound(

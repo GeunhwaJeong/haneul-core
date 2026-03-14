@@ -4,7 +4,9 @@
 mod client;
 mod v2;
 
-async fn transfer_coin(context: &haneul_sdk::wallet_context::WalletContext) -> haneul_sdk_types::Digest {
+async fn transfer_coin(
+    context: &haneul_sdk::wallet_context::WalletContext,
+) -> haneul_sdk_types::Digest {
     let gas_price = context.get_reference_gas_price().await.unwrap();
     let accounts_and_objs = context.get_all_accounts_and_gas_objects().await.unwrap();
     let sender = accounts_and_objs[0].0;

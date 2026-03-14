@@ -7,7 +7,7 @@ use std::time::Duration;
 use consensus_types::block::{BlockRef, PING_TRANSACTION_INDEX, TransactionIndex};
 use fastcrypto::traits::KeyPair;
 use haneul_test_transaction_builder::TestTransactionBuilder;
-use haneul_types::base_types::{ObjectRef, HaneulAddress, TransactionDigest};
+use haneul_types::base_types::{HaneulAddress, ObjectRef, TransactionDigest};
 use haneul_types::committee::EpochId;
 use haneul_types::crypto::{AccountKeyPair, get_account_key_pair};
 use haneul_types::digests::TransactionEffectsDigest;

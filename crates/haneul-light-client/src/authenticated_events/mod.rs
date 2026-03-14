@@ -12,9 +12,6 @@ use crate::proof::error::ProofError;
 use crate::proof::ocs::{OCSProof, OCSTarget};
 use epoch_cache::EpochCache;
 use futures::stream::Stream;
-use move_core_types::identifier::Identifier;
-use std::sync::Arc;
-use std::time::Duration;
 use haneul_rpc::field::{FieldMask, FieldMaskUtil};
 use haneul_rpc_api::grpc::alpha::event_service_proto::event_service_client::EventServiceClient;
 use haneul_rpc_api::grpc::alpha::proof_service_proto::proof_service_client::ProofServiceClient;
@@ -24,6 +21,9 @@ use haneul_types::accumulator_root::{EventStreamHead, derive_event_stream_head_o
 use haneul_types::base_types::HaneulAddress;
 use haneul_types::committee::Committee;
 use haneul_types::event::Event;
+use move_core_types::identifier::Identifier;
+use std::sync::Arc;
+use std::time::Duration;
 use thiserror::Error;
 use tonic::transport::Channel;
 

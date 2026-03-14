@@ -5,15 +5,12 @@ use crate::authority::AuthorityState;
 use crate::authority::test_authority_builder::TestAuthorityBuilder;
 use fastcrypto::{ed25519::Ed25519KeyPair, traits::KeyPair};
 use fastcrypto_zkp::bn254::zk_login::{OIDCProvider, ZkLoginInputs, parse_jwks};
-use move_core_types::{ident_str, identifier::Identifier};
-use rand::{SeedableRng, rngs::StdRng};
-use shared_crypto::intent::{Intent, IntentMessage};
-use haneul_types::crypto::{PublicKey, HaneulSignature, ToFromBytes, ZkLoginPublicIdentifier};
+use haneul_types::crypto::{HaneulSignature, PublicKey, ToFromBytes, ZkLoginPublicIdentifier};
 use haneul_types::utils::get_one_zklogin_inputs;
 use haneul_types::{
     authenticator_state::ActiveJwk,
     base_types::{FullObjectRef, dbg_addr},
-    crypto::{AccountKeyPair, Signature, HaneulKeyPair, get_key_pair},
+    crypto::{AccountKeyPair, HaneulKeyPair, Signature, get_key_pair},
     error::{HaneulResult, UserInputError},
     messages_consensus::ConsensusDeterminedVersionAssignments,
     multisig::{MultiSig, MultiSigPublicKey},
@@ -27,6 +24,9 @@ use haneul_types::{
     zk_login_authenticator::ZkLoginAuthenticator,
     zk_login_util::DEFAULT_JWK_BYTES,
 };
+use move_core_types::{ident_str, identifier::Identifier};
+use rand::{SeedableRng, rngs::StdRng};
+use shared_crypto::intent::{Intent, IntentMessage};
 
 use crate::authority::authority_tests::{call_move_, create_gas_objects, publish_object_basics};
 use haneul_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
@@ -1032,7 +1032,8 @@ async fn init_zklogin_transfer(
     pre_sign_mutations: impl FnOnce(&mut TransactionData),
     ephemeral_key: &Ed25519KeyPair,
     zklogin: &ZkLoginInputs,
-) -> haneul_types::message_envelope::Envelope<SenderSignedData, haneul_types::crypto::EmptySignInfo> {
+) -> haneul_types::message_envelope::Envelope<SenderSignedData, haneul_types::crypto::EmptySignInfo>
+{
     let rgp = authority_state.reference_gas_price_for_testing().unwrap();
     let object = authority_state.get_object(&object_id).await.unwrap();
     let gas_object = authority_state.get_object(&gas_object_id).await.unwrap();
@@ -1074,7 +1075,8 @@ async fn sign_with_zklogin_inside_multisig(
     zklogin: &ZkLoginInputs,
     max_epoch: u64,
     multisig_pk: MultiSigPublicKey,
-) -> haneul_types::message_envelope::Envelope<SenderSignedData, haneul_types::crypto::EmptySignInfo> {
+) -> haneul_types::message_envelope::Envelope<SenderSignedData, haneul_types::crypto::EmptySignInfo>
+{
     let rgp = authority_state.reference_gas_price_for_testing().unwrap();
     let object = authority_state.get_object(&object_id).await.unwrap();
     let gas_object = authority_state.get_object(&gas_object_id).await.unwrap();

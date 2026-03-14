@@ -140,7 +140,10 @@ impl RpcService {
         fn render(service: &RpcService, move_abort: &MoveAbort) -> Option<CleverError> {
             let location = move_abort.location.as_ref()?;
             let abort_code = move_abort.abort_code();
-            let package_id = location.package().parse::<haneul_sdk_types::Address>().ok()?;
+            let package_id = location
+                .package()
+                .parse::<haneul_sdk_types::Address>()
+                .ok()?;
             let module = location.module();
 
             let package = {

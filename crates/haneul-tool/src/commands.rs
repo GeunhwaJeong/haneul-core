@@ -14,8 +14,6 @@ use consensus_core::storage::{Store, rocksdb_store::RocksDBStore};
 use consensus_core::{BlockAPI, CommitAPI, CommitRange};
 use futures::TryStreamExt;
 use futures::future::join_all;
-use std::path::PathBuf;
-use std::{collections::BTreeMap, env, sync::Arc};
 use haneul_config::genesis::Genesis;
 use haneul_core::authority_client::AuthorityAPI;
 use haneul_protocol_config::Chain;
@@ -24,6 +22,8 @@ use haneul_rpc_api::Client;
 use haneul_types::gas_coin::GasCoin;
 use haneul_types::messages_consensus::ConsensusTransaction;
 use haneul_types::transaction::Transaction;
+use std::path::PathBuf;
+use std::{collections::BTreeMap, env, sync::Arc};
 use telemetry_subscribers::TracingHandle;
 
 use haneul_types::{

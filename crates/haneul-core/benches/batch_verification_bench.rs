@@ -8,13 +8,13 @@ use rand::prelude::*;
 use rand::seq::SliceRandom;
 
 use futures::future::join_all;
-use prometheus::Registry;
-use std::sync::Arc;
 use haneul_core::test_utils::{make_cert_with_large_committee, make_dummy_tx};
 use haneul_types::committee::Committee;
 use haneul_types::crypto::{AccountKeyPair, AuthorityKeyPair, get_key_pair};
 use haneul_types::in_memory_storage::InMemoryStorage;
 use haneul_types::transaction::CertifiedTransaction;
+use prometheus::Registry;
+use std::sync::Arc;
 
 use fastcrypto_zkp::bn254::zk_login_api::ZkLoginEnv;
 use haneul_core::signature_verifier::*;

@@ -10,16 +10,16 @@ use bytes::Bytes;
 use consensus_config::AuthorityIndex;
 use consensus_types::block::{BlockRef, Round};
 use futures::{StreamExt as _, stream::FuturesUnordered};
-use itertools::Itertools as _;
+use haneul_macros::fail_point_async;
 use haneullabs_common::debug_fatal;
 use haneullabs_metrics::{
     monitored_future,
     monitored_mpsc::{Receiver, Sender, channel},
     monitored_scope,
 };
+use itertools::Itertools as _;
 use parking_lot::{Mutex, RwLock};
 use rand::{prelude::SliceRandom as _, rngs::ThreadRng};
-use haneul_macros::fail_point_async;
 use tap::TapFallible;
 use tokio::{
     runtime::Handle,

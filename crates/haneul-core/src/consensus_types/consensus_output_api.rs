@@ -6,11 +6,11 @@ use std::{collections::BTreeSet, fmt::Display};
 use consensus_core::{BlockAPI, CommitRef, VerifiedBlock};
 use consensus_types::block::{BlockRef, TransactionIndex};
 use fastcrypto::hash::HashFunction as _;
-use itertools::Itertools as _;
 use haneul_types::{
     digests::Digest,
     messages_consensus::{AuthorityIndex, ConsensusTransaction},
 };
+use itertools::Itertools as _;
 
 pub(crate) struct ParsedTransaction {
     // Transaction from consensus output.

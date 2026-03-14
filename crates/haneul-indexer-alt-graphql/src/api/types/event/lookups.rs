@@ -6,10 +6,10 @@ use std::ops::Range;
 
 use anyhow::Context as _;
 use async_graphql::Context;
-use itertools::Either;
 use haneul_indexer_alt_reader::kv_loader::KvLoader;
 use haneul_indexer_alt_reader::kv_loader::TransactionEventsContents;
 use haneul_types::digests::TransactionDigest;
+use itertools::Either;
 
 use crate::api::types::event::CEvent;
 use crate::api::types::event::Event;

@@ -274,6 +274,13 @@ mod tests {
     use async_trait::async_trait;
     use base64::Engine as _;
     use base64::engine::general_purpose::STANDARD;
+    use haneul_types::base_types::move_ascii_str_layout;
+    use haneul_types::base_types::move_utf8_str_layout;
+    use haneul_types::base_types::url_layout;
+    use haneul_types::dynamic_field::DynamicFieldInfo;
+    use haneul_types::dynamic_field::derive_dynamic_field_id;
+    use haneul_types::id::ID;
+    use haneul_types::id::UID;
     use insta::assert_debug_snapshot;
     use insta::assert_json_snapshot;
     use move_core_types::account_address::AccountAddress;
@@ -282,13 +289,6 @@ mod tests {
     use move_core_types::language_storage::TypeTag;
     use move_core_types::u256::U256;
     use serde::Serialize;
-    use haneul_types::base_types::move_ascii_str_layout;
-    use haneul_types::base_types::move_utf8_str_layout;
-    use haneul_types::base_types::url_layout;
-    use haneul_types::dynamic_field::DynamicFieldInfo;
-    use haneul_types::dynamic_field::derive_dynamic_field_id;
-    use haneul_types::id::ID;
-    use haneul_types::id::UID;
     use tokio::sync::Barrier;
     use tokio::time::Duration;
 

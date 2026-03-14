@@ -5,7 +5,6 @@ use crate::ErrorReason;
 use crate::RpcError;
 use crate::RpcService;
 use crate::error::CheckpointNotFoundError;
-use prost_types::FieldMask;
 use haneul_rpc::field::FieldMaskTree;
 use haneul_rpc::field::FieldMaskUtil;
 use haneul_rpc::merge::Merge;
@@ -20,6 +19,7 @@ use haneul_rpc::proto::haneul::rpc::v2::TransactionEvents;
 use haneul_rpc::proto::haneul::rpc::v2::get_checkpoint_request::CheckpointId;
 use haneul_sdk_types::Digest;
 use haneul_types::balance_change::derive_balance_changes_2;
+use prost_types::FieldMask;
 
 pub const READ_MASK_DEFAULT: &str = "sequence_number,digest";
 

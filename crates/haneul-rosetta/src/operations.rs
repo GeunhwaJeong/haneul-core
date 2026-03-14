@@ -26,7 +26,7 @@ use haneul_rpc::proto::haneul::rpc::v2::command::Command;
 use haneul_rpc::proto::haneul::rpc::v2::input::InputKind;
 use haneul_rpc::proto::haneul::rpc::v2::transaction_kind::Data as TransactionKindData;
 use haneul_rpc::proto::haneul::rpc::v2::transaction_kind::Kind::ProgrammableTransaction as ProgrammableTransactionKind;
-use haneul_types::base_types::{ObjectID, SequenceNumber, HaneulAddress};
+use haneul_types::base_types::{HaneulAddress, ObjectID, SequenceNumber};
 use haneul_types::gas_coin::GasCoin;
 use haneul_types::governance::{ADD_STAKE_FUN_NAME, WITHDRAW_STAKE_FUN_NAME};
 use haneul_types::haneul_system_state::HANEUL_SYSTEM_MODULE_NAME;
@@ -607,8 +607,10 @@ impl Operations {
                 .fold(balances, |mut balances, (balance_change, ccy)| {
                     if let (Some(addr_str), Some(amount_str)) =
                         (&balance_change.address, &balance_change.amount)
-                        && let (Ok(owner), Ok(amount)) =
-                            (HaneulAddress::from_str(addr_str), i128::from_str(amount_str))
+                        && let (Ok(owner), Ok(amount)) = (
+                            HaneulAddress::from_str(addr_str),
+                            i128::from_str(amount_str),
+                        )
                     {
                         *balances.entry((owner, ccy.clone())).or_default() += amount;
                     }
@@ -684,8 +686,10 @@ impl Operations {
                 .fold(balances, |mut balances, (balance_change, ccy)| {
                     if let (Some(addr_str), Some(amount_str)) =
                         (&balance_change.address, &balance_change.amount)
-                        && let (Ok(owner), Ok(amount)) =
-                            (HaneulAddress::from_str(addr_str), i128::from_str(amount_str))
+                        && let (Ok(owner), Ok(amount)) = (
+                            HaneulAddress::from_str(addr_str),
+                            i128::from_str(amount_str),
+                        )
                     {
                         *balances.entry((owner, ccy.clone())).or_default() += amount;
                     }
@@ -878,8 +882,12 @@ impl Operations {
             }
         }
         let staking_balance = if principal_amounts != 0 {
-            *accounted_balances.entry((sender, HANEUL.clone())).or_default() -= principal_amounts;
-            *accounted_balances.entry((sender, HANEUL.clone())).or_default() -= reward_amounts;
+            *accounted_balances
+                .entry((sender, HANEUL.clone()))
+                .or_default() -= principal_amounts;
+            *accounted_balances
+                .entry((sender, HANEUL.clone()))
+                .or_default() -= reward_amounts;
             vec![
                 Operation::stake_principle(status, sender, principal_amounts),
                 Operation::stake_reward(status, sender, reward_amounts),
@@ -1136,7 +1144,7 @@ mod tests {
     use crate::HANEUL;
     use crate::types::ConstructionMetadata;
     use haneul_rpc::proto::haneul::rpc::v2::Transaction;
-    use haneul_types::base_types::{ObjectDigest, ObjectID, SequenceNumber, HaneulAddress};
+    use haneul_types::base_types::{HaneulAddress, ObjectDigest, ObjectID, SequenceNumber};
     use haneul_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
     use haneul_types::transaction::{TEST_ONLY_GAS_UNIT_FOR_TRANSFER, TransactionData};
 

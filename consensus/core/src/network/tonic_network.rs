@@ -14,14 +14,14 @@ use bytes::Bytes;
 use consensus_config::{AuthorityIndex, NetworkKeyPair, NetworkPublicKey};
 use consensus_types::block::{BlockRef, Round};
 use futures::{Stream, StreamExt as _, stream};
+use haneul_http::ServerHandle;
+use haneul_tls::AllowPublicKeys;
 use haneullabs_network::{
     Multiaddr,
     callback::{CallbackLayer, MakeCallbackHandler, ResponseHandler},
     multiaddr::Protocol,
 };
 use parking_lot::RwLock;
-use haneul_http::ServerHandle;
-use haneul_tls::AllowPublicKeys;
 use tokio_stream::{Iter, iter};
 use tonic::{Request, Response, Streaming, codec::CompressionEncoding};
 use tower_http::trace::{DefaultMakeSpan, DefaultOnFailure, TraceLayer};
@@ -1226,8 +1226,8 @@ mod tests {
     use super::*;
     use crate::{context::Clock, metrics::initialise_metrics};
     use consensus_config::{Parameters, local_committee_and_keys};
-    use prometheus::Registry;
     use haneul_protocol_config::ProtocolConfig;
+    use prometheus::Registry;
 
     fn create_test_context_and_client() -> (Arc<Context>, TonicClient) {
         let (committee, mut keypairs) = local_committee_and_keys(0, vec![1, 1, 1, 1]);

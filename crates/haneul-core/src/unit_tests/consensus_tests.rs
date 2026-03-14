@@ -12,9 +12,6 @@ use crate::mock_consensus::with_block_status;
 use consensus_core::BlockStatus;
 use consensus_types::block::{BlockRef, PING_TRANSACTION_INDEX};
 use fastcrypto::traits::KeyPair;
-use move_core_types::{account_address::AccountAddress, ident_str};
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng, thread_rng};
 use haneul_macros::sim_test;
 use haneul_types::HANEUL_FRAMEWORK_PACKAGE_ID;
 use haneul_types::crypto::{AccountKeyPair, deterministic_random_account_key};
@@ -27,10 +24,13 @@ use haneul_types::transaction::SharedObjectMutability;
 use haneul_types::transaction::VerifiedTransactionWithAliases;
 use haneul_types::utils::{make_committee_key_num, to_sender_signed_transaction};
 use haneul_types::{
-    base_types::{ExecutionDigests, ObjectID, HaneulAddress},
+    base_types::{ExecutionDigests, HaneulAddress, ObjectID},
     object::Object,
     transaction::{CallArg, ObjectArg, TEST_ONLY_GAS_UNIT_FOR_OBJECT_BASICS, TransactionData},
 };
+use move_core_types::{account_address::AccountAddress, ident_str};
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng, thread_rng};
 use tokio::time::sleep;
 
 /// Fixture: a few test gas objects.

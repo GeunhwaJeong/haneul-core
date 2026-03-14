@@ -3,14 +3,14 @@
 
 use super::*;
 use crate::authority::authority_store::LockDetailsWrapperDeprecated;
-use serde::{Deserialize, Serialize};
-use std::path::Path;
-use std::sync::atomic::AtomicU64;
 use haneul_types::base_types::SequenceNumber;
 use haneul_types::digests::TransactionEventsDigest;
 use haneul_types::effects::{TransactionEffects, TransactionEvents};
 use haneul_types::global_state_hash::GlobalStateHash;
 use haneul_types::storage::{FullObjectKey, MarkerValue};
+use serde::{Deserialize, Serialize};
+use std::path::Path;
+use std::sync::atomic::AtomicU64;
 use typed_store::metrics::SamplingInterval;
 use typed_store::rocks::{
     DBBatch, DBMap, DBMapTableConfigMap, DBOptions, MetricConf, default_db_options,
@@ -606,7 +606,10 @@ impl AuthorityPerpetualTables {
         Ok(())
     }
 
-    pub fn get_effects(&self, digest: &TransactionDigest) -> HaneulResult<Option<TransactionEffects>> {
+    pub fn get_effects(
+        &self,
+        digest: &TransactionDigest,
+    ) -> HaneulResult<Option<TransactionEffects>> {
         let Some(effect_digest) = self.executed_effects.get(digest)? else {
             return Ok(None);
         };

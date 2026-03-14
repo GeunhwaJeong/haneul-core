@@ -16,13 +16,6 @@ use consensus_core::{
 };
 use core::panic;
 use fastcrypto::traits::KeyPair as _;
-use haneullabs_metrics::{RegistryID, RegistryService};
-use haneullabs_network::Multiaddr;
-use prometheus::{IntGauge, Registry, register_int_gauge_with_registry};
-use std::collections::BTreeMap;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 use haneul_config::{ConsensusConfig, NodeConfig};
 use haneul_network::endpoint_manager::ConsensusAddressUpdater;
 use haneul_protocol_config::ProtocolVersion;
@@ -30,8 +23,16 @@ use haneul_types::crypto::NetworkPublicKey;
 use haneul_types::error::{HaneulErrorKind, HaneulResult};
 use haneul_types::messages_consensus::{ConsensusPosition, ConsensusTransaction};
 use haneul_types::{
-    committee::EpochId, haneul_system_state::epoch_start_haneul_system_state::EpochStartSystemStateTrait,
+    committee::EpochId,
+    haneul_system_state::epoch_start_haneul_system_state::EpochStartSystemStateTrait,
 };
+use haneullabs_metrics::{RegistryID, RegistryService};
+use haneullabs_network::Multiaddr;
+use prometheus::{IntGauge, Registry, register_int_gauge_with_registry};
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, broadcast};
 use tokio::time::{sleep, timeout};
 use tracing::{error, info};

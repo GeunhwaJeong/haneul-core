@@ -24,31 +24,55 @@ use crate::global_state_hasher::GlobalStateHasher;
 use crate::stake_aggregator::{InsertResult, MultiStakeAggregator};
 use consensus_core::CommitRef;
 use diffy::create_patch;
-use itertools::Itertools;
-use haneullabs_common::random::get_rng;
-use haneullabs_common::sync::notify_read::{CHECKPOINT_BUILDER_NOTIFY_READ_TASK_NAME, NotifyRead};
-use haneullabs_common::{assert_reachable, debug_fatal, fatal, in_antithesis};
-use haneullabs_metrics::{MonitoredFutureExt, monitored_scope, spawn_monitored_task};
-use nonempty::NonEmpty;
-use parking_lot::Mutex;
-use pin_project_lite::pin_project;
-use serde::{Deserialize, Serialize};
 use haneul_macros::fail_point_arg;
 use haneul_network::default_haneullabs_network_config;
 use haneul_types::HANEUL_ACCUMULATOR_ROOT_OBJECT_ID;
 use haneul_types::base_types::{ConciseableName, SequenceNumber};
 use haneul_types::executable_transaction::VerifiedExecutableTransaction;
 use haneul_types::execution::ExecutionTimeObservationKey;
+use haneul_types::haneul_system_state::epoch_start_haneul_system_state::EpochStartSystemStateTrait;
 use haneul_types::messages_checkpoint::{
     CheckpointArtifacts, CheckpointCommitment, VersionedFullCheckpointContents,
 };
-use haneul_types::haneul_system_state::epoch_start_haneul_system_state::EpochStartSystemStateTrait;
+use haneullabs_common::random::get_rng;
+use haneullabs_common::sync::notify_read::{CHECKPOINT_BUILDER_NOTIFY_READ_TASK_NAME, NotifyRead};
+use haneullabs_common::{assert_reachable, debug_fatal, fatal, in_antithesis};
+use haneullabs_metrics::{MonitoredFutureExt, monitored_scope, spawn_monitored_task};
+use itertools::Itertools;
+use nonempty::NonEmpty;
+use parking_lot::Mutex;
+use pin_project_lite::pin_project;
+use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, watch};
 use typed_store::rocks::{DBOptions, ReadWriteOptions, default_db_options};
 
 use crate::authority::authority_per_epoch_store::AuthorityPerEpochStore;
 use crate::authority::authority_store_pruner::PrunerWatermarks;
 use crate::consensus_handler::SequencedConsensusTransactionKey;
+use haneul_protocol_config::ProtocolVersion;
+use haneul_types::base_types::{AuthorityName, EpochId, TransactionDigest};
+use haneul_types::committee::StakeUnit;
+use haneul_types::crypto::AuthorityStrongQuorumSignInfo;
+use haneul_types::digests::{
+    CheckpointContentsDigest, CheckpointDigest, Digest, TransactionEffectsDigest,
+};
+use haneul_types::effects::{TransactionEffects, TransactionEffectsAPI};
+use haneul_types::error::{HaneulErrorKind, HaneulResult};
+use haneul_types::gas::GasCostSummary;
+use haneul_types::haneul_system_state::{HaneulSystemState, HaneulSystemStateTrait};
+use haneul_types::message_envelope::Message;
+use haneul_types::messages_checkpoint::{
+    CertifiedCheckpointSummary, CheckpointContents, CheckpointResponseV2, CheckpointSequenceNumber,
+    CheckpointSignatureMessage, CheckpointSummary, CheckpointSummaryResponse, CheckpointTimestamp,
+    EndOfEpochData, FullCheckpointContents, TrustedCheckpoint, VerifiedCheckpoint,
+    VerifiedCheckpointContents,
+};
+use haneul_types::messages_checkpoint::{CheckpointRequestV2, SignedCheckpointSummary};
+use haneul_types::messages_consensus::ConsensusTransactionKey;
+use haneul_types::signature::GenericSignature;
+use haneul_types::transaction::{
+    TransactionDataAPI, TransactionKey, TransactionKind, VerifiedTransaction,
+};
 use rand::seq::SliceRandom;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
@@ -60,30 +84,6 @@ use std::sync::Arc;
 use std::sync::Weak;
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
-use haneul_protocol_config::ProtocolVersion;
-use haneul_types::base_types::{AuthorityName, EpochId, TransactionDigest};
-use haneul_types::committee::StakeUnit;
-use haneul_types::crypto::AuthorityStrongQuorumSignInfo;
-use haneul_types::digests::{
-    CheckpointContentsDigest, CheckpointDigest, Digest, TransactionEffectsDigest,
-};
-use haneul_types::effects::{TransactionEffects, TransactionEffectsAPI};
-use haneul_types::error::{HaneulErrorKind, HaneulResult};
-use haneul_types::gas::GasCostSummary;
-use haneul_types::message_envelope::Message;
-use haneul_types::messages_checkpoint::{
-    CertifiedCheckpointSummary, CheckpointContents, CheckpointResponseV2, CheckpointSequenceNumber,
-    CheckpointSignatureMessage, CheckpointSummary, CheckpointSummaryResponse, CheckpointTimestamp,
-    EndOfEpochData, FullCheckpointContents, TrustedCheckpoint, VerifiedCheckpoint,
-    VerifiedCheckpointContents,
-};
-use haneul_types::messages_checkpoint::{CheckpointRequestV2, SignedCheckpointSummary};
-use haneul_types::messages_consensus::ConsensusTransactionKey;
-use haneul_types::signature::GenericSignature;
-use haneul_types::haneul_system_state::{HaneulSystemState, HaneulSystemStateTrait};
-use haneul_types::transaction::{
-    TransactionDataAPI, TransactionKey, TransactionKind, VerifiedTransaction,
-};
 use tokio::sync::Notify;
 use tracing::{debug, error, info, instrument, trace, warn};
 use typed_store::DBMapUtils;
@@ -1691,11 +1691,9 @@ impl CheckpointBuilder {
                 fx.transaction_digest(),
                 fx
             );
-            if let Some(version) = fx
-                .mutated()
-                .iter()
-                .find_map(|(oref, _)| (oref.0 == HANEUL_ACCUMULATOR_ROOT_OBJECT_ID).then_some(oref.1))
-            {
+            if let Some(version) = fx.mutated().iter().find_map(|(oref, _)| {
+                (oref.0 == HANEUL_ACCUMULATOR_ROOT_OBJECT_ID).then_some(oref.1)
+            }) {
                 assert!(
                     next_accumulator_version.is_none(),
                     "Only one settlement transaction should mutate the accumulator root object"
@@ -3706,8 +3704,6 @@ mod tests {
     use fastcrypto_zkp::bn254::zk_login::{JWK, JwkId};
     use futures::FutureExt as _;
     use futures::future::BoxFuture;
-    use std::collections::HashMap;
-    use std::ops::Deref;
     use haneul_macros::sim_test;
     use haneul_protocol_config::{Chain, ProtocolConfig};
     use haneul_types::accumulator_event::AccumulatorEvent;
@@ -3717,6 +3713,8 @@ mod tests {
     use haneul_types::effects::{TransactionEffects, TransactionEvents};
     use haneul_types::messages_checkpoint::SignedCheckpointSummary;
     use haneul_types::transaction::VerifiedTransaction;
+    use std::collections::HashMap;
+    use std::ops::Deref;
     use tokio::sync::mpsc;
 
     #[tokio::test]

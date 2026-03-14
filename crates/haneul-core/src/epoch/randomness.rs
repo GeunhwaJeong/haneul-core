@@ -10,6 +10,16 @@ use fastcrypto::traits::{KeyPair, ToFromBytes};
 use fastcrypto_tbls::{dkg_v1, dkg_v1::Output, nodes, nodes::PartyId};
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
+use haneul_macros::fail_point_if;
+use haneul_network::randomness;
+use haneul_types::base_types::AuthorityName;
+use haneul_types::committee::{Committee, EpochId, StakeUnit};
+use haneul_types::crypto::{AuthorityKeyPair, RandomnessRound};
+use haneul_types::error::{HaneulErrorKind, HaneulResult};
+use haneul_types::haneul_system_state::epoch_start_haneul_system_state::EpochStartSystemStateTrait;
+use haneul_types::messages_consensus::{
+    ConsensusTransaction, Round, TimestampMs, VersionedDkgConfirmation, VersionedDkgMessage,
+};
 use haneullabs_common::debug_fatal;
 use parking_lot::Mutex;
 use rand::SeedableRng;
@@ -18,16 +28,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Weak};
 use std::time::Instant;
-use haneul_macros::fail_point_if;
-use haneul_network::randomness;
-use haneul_types::base_types::AuthorityName;
-use haneul_types::committee::{Committee, EpochId, StakeUnit};
-use haneul_types::crypto::{AuthorityKeyPair, RandomnessRound};
-use haneul_types::error::{HaneulErrorKind, HaneulResult};
-use haneul_types::messages_consensus::{
-    ConsensusTransaction, Round, TimestampMs, VersionedDkgConfirmation, VersionedDkgMessage,
-};
-use haneul_types::haneul_system_state::epoch_start_haneul_system_state::EpochStartSystemStateTrait;
 use tokio::sync::OnceCell;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
@@ -831,10 +831,10 @@ mod tests {
     };
     use consensus_core::BlockStatus;
     use consensus_types::block::BlockRef;
-    use std::num::NonZeroUsize;
     use haneul_protocol_config::ProtocolConfig;
     use haneul_protocol_config::{Chain, ProtocolVersion};
     use haneul_types::messages_consensus::ConsensusTransactionKind;
+    use std::num::NonZeroUsize;
     use tokio::sync::mpsc;
 
     #[tokio::test]

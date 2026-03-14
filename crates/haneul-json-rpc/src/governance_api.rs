@@ -18,22 +18,22 @@ use haneul_json_rpc_api::{GovernanceReadApiOpenRpc, GovernanceReadApiServer, Jso
 use haneul_json_rpc_types::{DelegatedStake, Stake, StakeStatus};
 use haneul_json_rpc_types::{HaneulCommittee, ValidatorApy, ValidatorApys};
 use haneul_open_rpc::Module;
-use haneul_types::base_types::{ObjectID, HaneulAddress};
+use haneul_types::base_types::{HaneulAddress, ObjectID};
 use haneul_types::committee::EpochId;
 use haneul_types::dynamic_field::get_dynamic_field_from_store;
 use haneul_types::error::{HaneulError, HaneulErrorKind, UserInputError};
 use haneul_types::governance::StakedHaneul;
-use haneul_types::id::ID;
-use haneul_types::object::ObjectRead;
 use haneul_types::haneul_serde::BigInt;
-use haneul_types::haneul_system_state::PoolTokenExchangeRate;
 use haneul_types::haneul_system_state::HaneulSystemStateTrait;
+use haneul_types::haneul_system_state::PoolTokenExchangeRate;
 use haneul_types::haneul_system_state::haneul_system_state_summary::HaneulSystemStateSummary;
 use haneul_types::haneul_system_state::{HaneulSystemState, get_validator_from_table};
+use haneul_types::id::ID;
+use haneul_types::object::ObjectRead;
 
 use crate::authority_state::StateRead;
-use crate::error::{Error, RpcInterimResult, HaneulRpcInputError};
-use crate::{ObjectProvider, HaneulRpcModule, with_tracing};
+use crate::error::{Error, HaneulRpcInputError, RpcInterimResult};
+use crate::{HaneulRpcModule, ObjectProvider, with_tracing};
 
 #[derive(Clone)]
 pub struct GovernanceReadApi {
@@ -360,7 +360,8 @@ async fn exchange_rates(
     _current_epoch: EpochId,
 ) -> RpcInterimResult<Vec<ValidatorExchangeRates>> {
     let system_state = state.get_system_state()?;
-    let system_state_summary: HaneulSystemStateSummary = system_state.into_haneul_system_state_summary();
+    let system_state_summary: HaneulSystemStateSummary =
+        system_state.into_haneul_system_state_summary();
 
     // Get validator rate tables
     let mut tables = vec![];

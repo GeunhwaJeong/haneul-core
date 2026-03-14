@@ -9,17 +9,17 @@ use std::{
 
 use clap::*;
 use fastcrypto::encoding::{Base58, Encoding, Hex};
+use haneul_protocol_config_macros::{
+    ProtocolConfigAccessors, ProtocolConfigFeatureFlagsGetters, ProtocolConfigOverride,
+};
+use haneullabs_common::in_integration_test;
 use move_binary_format::{
     binary_config::{BinaryConfig, TableConfig},
     file_format_common::VERSION_1,
 };
 use move_vm_config::verifier::VerifierConfig;
-use haneullabs_common::in_integration_test;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
-use haneul_protocol_config_macros::{
-    ProtocolConfigAccessors, ProtocolConfigFeatureFlagsGetters, ProtocolConfigOverride,
-};
 use tracing::{info, warn};
 
 /// The minimum and maximum protocol versions supported by this build.

@@ -13,12 +13,12 @@ use consensus_config::{AuthorityIndex, ProtocolKeyPair};
 #[cfg(test)]
 use consensus_config::{Stake, local_committee_and_keys};
 use consensus_types::block::{BlockRef, BlockTimestampMs, Round};
-use itertools::Itertools as _;
+use haneul_macros::fail_point;
 #[cfg(test)]
 use haneullabs_metrics::monitored_mpsc::UnboundedReceiver;
 use haneullabs_metrics::monitored_scope;
+use itertools::Itertools as _;
 use parking_lot::RwLock;
-use haneul_macros::fail_point;
 use tokio::{
     sync::{broadcast, watch},
     time::Instant,
@@ -1488,8 +1488,8 @@ mod test {
     use consensus_config::{AuthorityIndex, Parameters};
     use consensus_types::block::TransactionIndex;
     use futures::{StreamExt, stream::FuturesUnordered};
-    use haneullabs_metrics::monitored_mpsc;
     use haneul_protocol_config::ProtocolConfig;
+    use haneullabs_metrics::monitored_mpsc;
     use tokio::time::sleep;
 
     use super::*;

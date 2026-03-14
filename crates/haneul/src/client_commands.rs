@@ -9,6 +9,7 @@ use crate::{
     verifier_meter::{AccumulatingMeter, Accumulator},
 };
 use futures::TryStreamExt;
+use haneul_rpc::proto::haneul::rpc::v2::{self as proto};
 use std::{
     collections::{BTreeMap, BTreeSet, btree_map::Entry},
     fmt::{Debug, Display, Formatter, Write},
@@ -17,7 +18,6 @@ use std::{
     str::FromStr,
     sync::Arc,
 };
-use haneul_rpc::proto::haneul::rpc::v2::{self as proto};
 
 use anyhow::{Context, anyhow, bail, ensure};
 use bip32::DerivationPath;
@@ -29,6 +29,8 @@ use fastcrypto::{
 };
 use reqwest::StatusCode;
 
+use haneul_config::verifier_signing_config::VerifierSigningConfig;
+use haneul_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
 use move_binary_format::CompiledModule;
 use move_bytecode_utils::module_cache::GetModule;
 use move_bytecode_verifier_meter::Scope;
@@ -42,15 +44,12 @@ use move_package_alt_compilation::build_config::BuildConfig as MoveBuildConfig;
 use prometheus::Registry;
 use serde::Serialize;
 use serde_json::{Value, json};
-use haneul_config::verifier_signing_config::VerifierSigningConfig;
-use haneul_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
 
-use shared_crypto::intent::Intent;
 use haneul_json::HaneulJsonValue;
 use haneul_json_rpc_types::{
-    BalanceChange as RpcBalanceChange, BcsEvent, Coin, DryRunTransactionBlockResponse,
-    ObjectChange as RpcObjectChange, HaneulEvent, HaneulTransactionBlock, HaneulTransactionBlockEffects,
-    HaneulTransactionBlockEvents, HaneulTransactionBlockResponse,
+    BalanceChange as RpcBalanceChange, BcsEvent, Coin, DryRunTransactionBlockResponse, HaneulEvent,
+    HaneulTransactionBlock, HaneulTransactionBlockEffects, HaneulTransactionBlockEvents,
+    HaneulTransactionBlockResponse, ObjectChange as RpcObjectChange,
 };
 use haneul_keys::key_identity::KeyIdentity;
 use haneul_keys::keystore::AccountKeystore;
@@ -61,14 +60,15 @@ use haneul_rpc_api::{
     client::{ExecutedTransaction, SimulateTransactionResponse},
 };
 use haneul_sdk::{
-    HANEUL_COIN_TYPE, HANEUL_DEVNET_URL, HANEUL_LOCAL_NETWORK_URL, HANEUL_LOCAL_NETWORK_URL_0, HANEUL_TESTNET_URL,
+    HANEUL_COIN_TYPE, HANEUL_DEVNET_URL, HANEUL_LOCAL_NETWORK_URL, HANEUL_LOCAL_NETWORK_URL_0,
+    HANEUL_TESTNET_URL,
     haneul_client_config::{HaneulClientConfig, HaneulEnv},
     haneul_sdk_types::bcs::ToBcs,
     wallet_context::WalletContext,
 };
 use haneul_types::{
     HANEUL_FRAMEWORK_ADDRESS, HANEUL_FRAMEWORK_PACKAGE_ID,
-    base_types::{FullObjectID, ObjectID, ObjectRef, ObjectType, SequenceNumber, HaneulAddress},
+    base_types::{FullObjectID, HaneulAddress, ObjectID, ObjectRef, ObjectType, SequenceNumber},
     coin::{COIN_MODULE_NAME, COIN_STRUCT_NAME},
     crypto::{EmptySignInfo, SignatureScheme},
     digests::TransactionDigest,
@@ -78,6 +78,7 @@ use haneul_types::{
     execution_status::ExecutionStatus,
     gas::GasCostSummary,
     gas_coin::GasCoin,
+    haneul_sdk_types_conversions::type_tag_sdk_to_core,
     message_envelope::Envelope,
     metrics::BytecodeVerifierMetrics,
     move_package::{MovePackage, UpgradeCap},
@@ -85,12 +86,12 @@ use haneul_types::{
     parse_haneul_type_tag,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
     signature::GenericSignature,
-    haneul_sdk_types_conversions::type_tag_sdk_to_core,
     transaction::{
         Command, InputObjectKind, ObjectArg, SenderSignedData, SharedObjectMutability, Transaction,
         TransactionData, TransactionDataAPI, TransactionKind,
     },
 };
+use shared_crypto::intent::Intent;
 
 use json_to_table::json_to_table;
 use tabled::{
@@ -104,15 +105,15 @@ use tabled::{
     },
 };
 
+use haneul_keys::key_derive;
+use haneul_package_alt::{BuildParams, HaneulFlavor, find_environment};
+use haneul_source_validation::{BytecodeSourceVerifier, ValidationMode};
+use haneul_types::digests::ChainIdentifier;
 use move_package_alt::{
     RootPackage,
     schema::{OriginalID, Publication, PublishAddresses, PublishedID},
 };
 use move_symbol_pool::Symbol;
-use haneul_keys::key_derive;
-use haneul_package_alt::{BuildParams, HaneulFlavor, find_environment};
-use haneul_source_validation::{BytecodeSourceVerifier, ValidationMode};
-use haneul_types::digests::ChainIdentifier;
 use tracing::{debug, info};
 
 pub(crate) static USER_AGENT: &str =
@@ -1088,7 +1089,9 @@ impl HaneulClientCommands {
                 // without failing HaneulJSON's checks.
                 let args = args
                     .into_iter()
-                    .map(|value| HaneulJsonValue::new(convert_number_to_string(value.to_json_value())))
+                    .map(|value| {
+                        HaneulJsonValue::new(convert_number_to_string(value.to_json_value()))
+                    })
                     .collect::<Result<_, _>>()?;
 
                 let type_args = type_args
@@ -1313,7 +1316,9 @@ impl HaneulClientCommands {
                 let client = context.grpc_client()?;
                 let _ = context.cache_chain_id().await?;
 
-                let tx_kind = client.transaction_builder().pay_all_haneul_tx_kind(recipient);
+                let tx_kind = client
+                    .transaction_builder()
+                    .pay_all_haneul_tx_kind(recipient);
                 let gas_payment = client
                     .transaction_builder()
                     .input_refs(&input_coins)
@@ -2069,7 +2074,11 @@ impl Display for HaneulClientCommandResult {
                 }
 
                 let mut builder = TableBuilder::default();
-                builder.set_header(vec!["gasCoinId", "geunhwaBalance (GEUNHWA)", "haneulBalance (HANEUL)"]);
+                builder.set_header(vec![
+                    "gasCoinId",
+                    "geunhwaBalance (GEUNHWA)",
+                    "haneulBalance (HANEUL)",
+                ]);
                 for coin in &gas_coins {
                     builder.push_record(vec![
                         coin.gas_coin_id.to_string(),
@@ -2407,9 +2416,11 @@ fn to_legacy_object_changes(response: &ExecutedTransaction) -> Vec<RpcObjectChan
                 OutputObjectState::ObjectWrite => {
                     let object_type = parse_object_type_tag(changed.object_type())?;
                     let owner = changed.output_owner_opt().and_then(|owner| {
-                        <haneul_sdk::haneul_sdk_types::Owner as TryFrom<&proto::Owner>>::try_from(owner)
-                            .ok()
-                            .map(Owner::from)
+                        <haneul_sdk::haneul_sdk_types::Owner as TryFrom<&proto::Owner>>::try_from(
+                            owner,
+                        )
+                        .ok()
+                        .map(Owner::from)
                     })?;
                     let version: SequenceNumber = changed.output_version().into();
                     let digest = changed.output_digest().parse().ok()?;
@@ -2522,7 +2533,8 @@ fn to_legacy_transaction_block_response(
 
     let mut legacy_response = HaneulTransactionBlockResponse::new(response.transaction.digest());
     legacy_response.transaction = to_legacy_transaction(response);
-    legacy_response.effects = HaneulTransactionBlockEffects::try_from(response.effects.clone()).ok();
+    legacy_response.effects =
+        HaneulTransactionBlockEffects::try_from(response.effects.clone()).ok();
     legacy_response.events = to_legacy_events(response);
     legacy_response.object_changes = (!object_changes.is_empty()).then_some(object_changes);
     legacy_response.balance_changes = (!balance_changes.is_empty()).then_some(balance_changes);
@@ -2577,10 +2589,12 @@ impl Debug for HaneulClientCommandResult {
                 Ok(serde_json::to_string_pretty(&gas_coins)?)
             }
             HaneulClientCommandResult::Object(object) => Ok(serde_json::to_string_pretty(&object)?),
-            HaneulClientCommandResult::RawObject(object) => Ok(serde_json::to_string_pretty(&object)?),
-            HaneulClientCommandResult::TransactionBlock(response) => Ok(serde_json::to_string_pretty(
-                &to_legacy_transaction_block_response(response),
-            )?),
+            HaneulClientCommandResult::RawObject(object) => {
+                Ok(serde_json::to_string_pretty(&object)?)
+            }
+            HaneulClientCommandResult::TransactionBlock(response) => Ok(
+                serde_json::to_string_pretty(&to_legacy_transaction_block_response(response))?,
+            ),
             HaneulClientCommandResult::DryRun(response) => {
                 if let Some(legacy) = to_legacy_dry_run_transaction_block_response(response) {
                     Ok(serde_json::to_string_pretty(&legacy)?)

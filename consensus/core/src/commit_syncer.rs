@@ -34,8 +34,8 @@ use bytes::Bytes;
 use consensus_config::AuthorityIndex;
 use consensus_types::block::BlockRef;
 use futures::{StreamExt as _, stream::FuturesOrdered};
-use itertools::Itertools as _;
 use haneullabs_metrics::spawn_logged_monitored_task;
+use itertools::Itertools as _;
 use parking_lot::RwLock;
 use rand::{prelude::SliceRandom as _, rngs::ThreadRng};
 use tokio::{

@@ -12,8 +12,8 @@ use crate::coin_reservation::{
 use crate::committee::{Committee, EpochId, ProtocolVersion};
 use crate::crypto::{
     AuthoritySignInfo, AuthoritySignInfoTrait, AuthoritySignature, AuthorityStrongQuorumSignInfo,
-    DefaultHash, Ed25519HaneulSignature, EmptySignInfo, RandomnessRound, Signature, Signer,
-    HaneulSignatureInner, ToFromBytes, default_hash,
+    DefaultHash, Ed25519HaneulSignature, EmptySignInfo, HaneulSignatureInner, RandomnessRound,
+    Signature, Signer, ToFromBytes, default_hash,
 };
 use crate::digests::{AdditionalConsensusStateDigest, CertificateDigest, SenderSignedDataDigest};
 use crate::digests::{ChainIdentifier, ConsensusCommitDigest, ZKLoginInputsDigest};
@@ -35,12 +35,14 @@ use crate::signature_verification::{
 };
 use crate::type_input::TypeInput;
 use crate::{
-    HANEUL_ACCUMULATOR_ROOT_OBJECT_ID, HANEUL_AUTHENTICATOR_STATE_OBJECT_ID, HANEUL_CLOCK_OBJECT_ID,
-    HANEUL_CLOCK_OBJECT_SHARED_VERSION, HANEUL_FRAMEWORK_PACKAGE_ID, HANEUL_RANDOMNESS_STATE_OBJECT_ID,
-    HANEUL_SYSTEM_STATE_OBJECT_ID, HANEUL_SYSTEM_STATE_OBJECT_SHARED_VERSION,
+    HANEUL_ACCUMULATOR_ROOT_OBJECT_ID, HANEUL_AUTHENTICATOR_STATE_OBJECT_ID,
+    HANEUL_CLOCK_OBJECT_ID, HANEUL_CLOCK_OBJECT_SHARED_VERSION, HANEUL_FRAMEWORK_PACKAGE_ID,
+    HANEUL_RANDOMNESS_STATE_OBJECT_ID, HANEUL_SYSTEM_STATE_OBJECT_ID,
+    HANEUL_SYSTEM_STATE_OBJECT_SHARED_VERSION,
 };
 use enum_dispatch::enum_dispatch;
 use fastcrypto::{encoding::Base64, hash::HashFunction};
+use haneul_protocol_config::{PerObjectCongestionControlMode, ProtocolConfig};
 use itertools::{Either, Itertools};
 use move_core_types::{ident_str, identifier};
 use move_core_types::{identifier::Identifier, language_storage::TypeTag};
@@ -58,7 +60,6 @@ use std::{
     iter,
 };
 use strum::IntoStaticStr;
-use haneul_protocol_config::{PerObjectCongestionControlMode, ProtocolConfig};
 use tap::Pipe;
 use tracing::trace;
 
@@ -1609,9 +1610,9 @@ impl TransactionKind {
     /// It covers both Call and ChangeEpoch transaction kind, because both makes Move calls.
     pub fn shared_input_objects(&self) -> impl Iterator<Item = SharedInputObject> + '_ {
         match &self {
-            Self::ChangeEpoch(_) => {
-                Either::Left(Either::Left(iter::once(SharedInputObject::HANEUL_SYSTEM_OBJ)))
-            }
+            Self::ChangeEpoch(_) => Either::Left(Either::Left(iter::once(
+                SharedInputObject::HANEUL_SYSTEM_OBJ,
+            ))),
 
             Self::ConsensusCommitPrologue(_)
             | Self::ConsensusCommitPrologueV2(_)
@@ -2106,7 +2107,11 @@ impl TransactionData {
         })
     }
 
-    pub fn new_with_gas_data(kind: TransactionKind, sender: HaneulAddress, gas_data: GasData) -> Self {
+    pub fn new_with_gas_data(
+        kind: TransactionKind,
+        sender: HaneulAddress,
+        gas_data: GasData,
+    ) -> Self {
         TransactionData::V1(TransactionDataV1 {
             kind,
             sender,
@@ -3392,7 +3397,10 @@ impl SenderSignedData {
 
     /// Validate untrusted user transaction, including its size, input count, command count, etc.
     /// Returns the certificate serialised bytes size.
-    pub fn validity_check(&self, context: &TxValidityCheckContext<'_>) -> Result<usize, HaneulError> {
+    pub fn validity_check(
+        &self,
+        context: &TxValidityCheckContext<'_>,
+    ) -> Result<usize, HaneulError> {
         // Check that the features used by the user signatures are enabled on the network.
         self.check_user_signature_protocol_compatibility(context.config)?;
 

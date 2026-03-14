@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use haneul_types::{
-    base_types::{FullObjectID, ObjectID, ObjectRef, SequenceNumber, HaneulAddress},
+    base_types::{FullObjectID, HaneulAddress, ObjectID, ObjectRef, SequenceNumber},
     crypto::{AccountKeyPair, get_key_pair},
     effects::TransactionEffects,
     execution_status::{CommandArgumentError, ExecutionFailureStatus},
@@ -32,7 +32,6 @@ use crate::{
     },
     move_call,
 };
-use move_core_types::ident_str;
 use haneul_types::base_types::TransactionDigest;
 use haneul_types::committee::EpochId;
 use haneul_types::effects::TransactionEffectsAPI;
@@ -42,6 +41,7 @@ use haneul_types::execution_status::ExecutionFailureStatus::{
     InputObjectDeleted, SharedObjectOperationNotAllowed,
 };
 use haneul_types::transaction::ObjectArg;
+use move_core_types::ident_str;
 
 pub struct TestRunner {
     pub sender: HaneulAddress,

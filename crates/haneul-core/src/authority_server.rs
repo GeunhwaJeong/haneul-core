@@ -6,30 +6,13 @@ use anyhow::Result;
 use async_trait::async_trait;
 use fastcrypto::traits::KeyPair;
 use futures::{TryFutureExt, future};
-use itertools::Itertools as _;
-use haneullabs_common::{assert_reachable, debug_fatal};
-use haneullabs_metrics::spawn_monitored_task;
-use prometheus::{
-    Gauge, Histogram, HistogramVec, IntCounter, IntCounterVec, Registry,
-    register_gauge_with_registry, register_histogram_vec_with_registry,
-    register_histogram_with_registry, register_int_counter_vec_with_registry,
-    register_int_counter_with_registry,
-};
-use std::{
-    cmp::Ordering,
-    future::Future,
-    io,
-    net::{IpAddr, SocketAddr},
-    pin::Pin,
-    sync::Arc,
-    time::{Duration, SystemTime},
-};
 use haneul_network::{
     api::{Validator, ValidatorServer},
     tonic,
     validator::server::HANEUL_TLS_SERVER_NAME,
 };
 use haneul_types::effects::TransactionEffectsAPI;
+use haneul_types::haneul_system_state::HaneulSystemState;
 use haneul_types::message_envelope::Message;
 use haneul_types::messages_consensus::ConsensusPosition;
 use haneul_types::messages_consensus::ConsensusTransaction;
@@ -39,7 +22,6 @@ use haneul_types::messages_grpc::{
 };
 use haneul_types::multiaddr::Multiaddr;
 use haneul_types::object::Object;
-use haneul_types::haneul_system_state::HaneulSystemState;
 use haneul_types::traffic_control::{ClientIdSource, Weight};
 use haneul_types::{
     base_types::ObjectID,
@@ -60,6 +42,24 @@ use haneul_types::{
     messages_checkpoint::{
         CheckpointRequest, CheckpointRequestV2, CheckpointResponse, CheckpointResponseV2,
     },
+};
+use haneullabs_common::{assert_reachable, debug_fatal};
+use haneullabs_metrics::spawn_monitored_task;
+use itertools::Itertools as _;
+use prometheus::{
+    Gauge, Histogram, HistogramVec, IntCounter, IntCounterVec, Registry,
+    register_gauge_with_registry, register_histogram_vec_with_registry,
+    register_histogram_with_registry, register_int_counter_vec_with_registry,
+    register_int_counter_with_registry,
+};
+use std::{
+    cmp::Ordering,
+    future::Future,
+    io,
+    net::{IpAddr, SocketAddr},
+    pin::Pin,
+    sync::Arc,
+    time::{Duration, SystemTime},
 };
 use tokio::sync::oneshot;
 use tokio::time::timeout;
@@ -1505,11 +1505,12 @@ impl ValidatorService {
             last_committed_leader_round,
         };
 
-        let raw_response = typed_response
-            .try_into()
-            .map_err(|e: haneul_types::error::HaneulError| {
-                tonic::Status::internal(format!("Failed to serialize health response: {}", e))
-            })?;
+        let raw_response =
+            typed_response
+                .try_into()
+                .map_err(|e: haneul_types::error::HaneulError| {
+                    tonic::Status::internal(format!("Failed to serialize health response: {}", e))
+                })?;
 
         Ok((tonic::Response::new(raw_response), Weight::one()))
     }
@@ -1765,8 +1766,10 @@ impl Validator for ValidatorService {
     async fn validator_health(
         &self,
         request: tonic::Request<haneul_types::messages_grpc::RawValidatorHealthRequest>,
-    ) -> Result<tonic::Response<haneul_types::messages_grpc::RawValidatorHealthResponse>, tonic::Status>
-    {
+    ) -> Result<
+        tonic::Response<haneul_types::messages_grpc::RawValidatorHealthResponse>,
+        tonic::Status,
+    > {
         handle_with_decoration!(self, validator_health_impl, request)
     }
 }

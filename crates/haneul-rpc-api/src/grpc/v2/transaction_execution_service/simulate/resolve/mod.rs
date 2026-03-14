@@ -12,7 +12,6 @@ use crate::RpcService;
 use crate::error::ObjectNotFoundError;
 use crate::reader::StateReader;
 use bytes::Bytes;
-use move_binary_format::normalized;
 use haneul_protocol_config::ProtocolConfig;
 use haneul_rpc::proto::google::rpc::bad_request::FieldViolation;
 use haneul_rpc::proto::haneul::rpc::v2::Transaction;
@@ -30,6 +29,7 @@ use haneul_types::transaction::Reservation;
 use haneul_types::transaction::TransactionData;
 use haneul_types::transaction::WithdrawFrom;
 use haneul_types::transaction::WithdrawalTypeArg;
+use move_binary_format::normalized;
 use tap::Pipe;
 
 mod literal;
@@ -787,7 +787,9 @@ struct UnresolvedInput<'a> {
 }
 
 impl<'a> UnresolvedInput<'a> {
-    fn from_proto(input: &'a haneul_rpc::proto::haneul::rpc::v2::Input) -> Result<Self, FieldViolation> {
+    fn from_proto(
+        input: &'a haneul_rpc::proto::haneul::rpc::v2::Input,
+    ) -> Result<Self, FieldViolation> {
         Ok(Self {
             kind: input.kind.map(|_| input.kind()),
             literal: input.literal.as_deref(),

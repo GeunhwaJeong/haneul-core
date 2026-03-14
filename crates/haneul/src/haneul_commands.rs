@@ -16,27 +16,19 @@ use clap::*;
 use colored::Colorize;
 use fastcrypto::traits::KeyPair;
 use futures::future;
-use move_analyzer::analyzer;
-use move_command_line_common::files::MOVE_COMPILED_EXTENSION;
-use move_compiler::editions::Flavor;
-use move_package_alt_compilation::build_config::BuildConfig;
-use haneullabs_common::tempdir;
-use prometheus::Registry;
-use rand::rngs::OsRng;
-use serde_json::json;
-use std::collections::BTreeMap;
 use haneul_bridge::config::BridgeCommitteeConfig;
-use haneul_bridge::metrics::BridgeMetrics;
 use haneul_bridge::haneul_client::HaneulBridgeClient;
 use haneul_bridge::haneul_transaction_builder::build_committee_register_transaction;
+use haneul_bridge::metrics::BridgeMetrics;
 use haneul_config::node::Genesis;
 use haneul_config::p2p::SeedPeer;
 use haneul_config::{
-    Config, FULL_NODE_DB_PATH, PersistedConfig, HANEUL_CLIENT_CONFIG, HANEUL_FULLNODE_CONFIG,
-    HANEUL_NETWORK_CONFIG, genesis_blob_exists, haneul_config_dir,
+    Config, FULL_NODE_DB_PATH, HANEUL_CLIENT_CONFIG, HANEUL_FULLNODE_CONFIG, HANEUL_NETWORK_CONFIG,
+    PersistedConfig, genesis_blob_exists, haneul_config_dir,
 };
 use haneul_config::{
-    HANEUL_BENCHMARK_GENESIS_GAS_KEYSTORE_FILENAME, HANEUL_GENESIS_FILENAME, HANEUL_KEYSTORE_FILENAME,
+    HANEUL_BENCHMARK_GENESIS_GAS_KEYSTORE_FILENAME, HANEUL_GENESIS_FILENAME,
+    HANEUL_KEYSTORE_FILENAME,
 };
 use haneul_faucet::{AppState, FaucetConfig, LocalFaucet, create_wallet_context, start_faucet};
 use haneul_futures::service::Service;
@@ -76,9 +68,18 @@ use haneul_swarm_config::genesis_config::GenesisConfig;
 use haneul_swarm_config::network_config::NetworkConfig;
 use haneul_swarm_config::network_config_builder::ConfigBuilder;
 use haneul_swarm_config::node_config_builder::FullnodeConfigBuilder;
-use haneul_types::base_types::{ObjectID, HaneulAddress};
-use haneul_types::crypto::{SignatureScheme, HaneulKeyPair, ToFromBytes};
+use haneul_types::base_types::{HaneulAddress, ObjectID};
+use haneul_types::crypto::{HaneulKeyPair, SignatureScheme, ToFromBytes};
 use haneul_types::move_package::MovePackage;
+use haneullabs_common::tempdir;
+use move_analyzer::analyzer;
+use move_command_line_common::files::MOVE_COMPILED_EXTENSION;
+use move_compiler::editions::Flavor;
+use move_package_alt_compilation::build_config::BuildConfig;
+use prometheus::Registry;
+use rand::rngs::OsRng;
+use serde_json::json;
+use std::collections::BTreeMap;
 use tokio::time::interval;
 use tracing::info;
 use url::Url;
@@ -438,7 +439,8 @@ impl HaneulCommand {
                 config,
                 dump_addresses,
             } => {
-                let config_path = config.unwrap_or(haneul_config_dir()?.join(HANEUL_NETWORK_CONFIG));
+                let config_path =
+                    config.unwrap_or(haneul_config_dir()?.join(HANEUL_NETWORK_CONFIG));
                 let config: NetworkConfig = PersistedConfig::read(&config_path).map_err(|err| {
                     err.context(format!(
                         "Cannot open Haneul network config file at {:?}",
@@ -1322,7 +1324,10 @@ async fn genesis(
     // up (if --force/-f option was specified or report an
     // error
     let dir = haneul_config_dir.read_dir().map_err(|err| {
-        anyhow!(err).context(format!("Cannot open Haneul config dir {:?}", haneul_config_dir))
+        anyhow!(err).context(format!(
+            "Cannot open Haneul config dir {:?}",
+            haneul_config_dir
+        ))
     })?;
     let files = dir.collect::<Result<Vec<_>, _>>()?;
 
@@ -1351,12 +1356,16 @@ async fn genesis(
                 }
             } else {
                 fs::remove_dir_all(haneul_config_dir).map_err(|err| {
-                    anyhow!(err)
-                        .context(format!("Cannot remove Haneul config dir {:?}", haneul_config_dir))
+                    anyhow!(err).context(format!(
+                        "Cannot remove Haneul config dir {:?}",
+                        haneul_config_dir
+                    ))
                 })?;
                 fs::create_dir(haneul_config_dir).map_err(|err| {
-                    anyhow!(err)
-                        .context(format!("Cannot create Haneul config dir {:?}", haneul_config_dir))
+                    anyhow!(err).context(format!(
+                        "Cannot create Haneul config dir {:?}",
+                        haneul_config_dir
+                    ))
                 })?;
             }
         } else if files.len() != 2 || !client_path.exists() || !keystore_path.exists() {
@@ -1458,8 +1467,8 @@ async fn genesis(
     let mut ssfn_nodes = vec![];
     if let Some(ssfn_info) = ssfn_info {
         for (i, ssfn) in ssfn_info.into_iter().enumerate() {
-            let path =
-                haneul_config_dir.join(haneul_config::ssfn_config_file(ssfn.p2p_address.clone(), i));
+            let path = haneul_config_dir
+                .join(haneul_config::ssfn_config_file(ssfn.p2p_address.clone(), i));
             // join base fullnode config with each SsfnGenesisConfig entry
             let ssfn_config = FullnodeConfigBuilder::new()
                 .with_config_directory(FULL_NODE_DB_PATH.into())
@@ -1604,7 +1613,9 @@ async fn prompt_if_no_config(
 
 /// Create a keystore with a single key at `keystore_file`; returns the created keystore and
 /// address
-async fn create_default_keystore(keystore_file: &Path) -> anyhow::Result<(Keystore, HaneulAddress)> {
+async fn create_default_keystore(
+    keystore_file: &Path,
+) -> anyhow::Result<(Keystore, HaneulAddress)> {
     let mut keystore = Keystore::from(FileBasedKeystore::load_or_create(
         &keystore_file.to_path_buf(),
     )?);
@@ -1631,7 +1642,9 @@ fn read_line() -> Result<String, anyhow::Error> {
 }
 
 /// Get the currently configured wallet context, creating one if it doesn't exist
-async fn get_wallet_context(client_config: &HaneulEnvConfig) -> Result<WalletContext, anyhow::Error> {
+async fn get_wallet_context(
+    client_config: &HaneulEnvConfig,
+) -> Result<WalletContext, anyhow::Error> {
     let wallet_conf_file = client_config
         .config
         .clone()

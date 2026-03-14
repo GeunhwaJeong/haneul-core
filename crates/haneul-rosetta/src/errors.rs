@@ -17,7 +17,7 @@ use strum_macros::EnumIter;
 use haneul_rpc::proto::haneul::rpc::v2::ExecutionError;
 use haneul_types::error::{HaneulError, HaneulErrorKind};
 
-use crate::types::{BlockHash, OperationType, PublicKey, HaneulEnv};
+use crate::types::{BlockHash, HaneulEnv, OperationType, PublicKey};
 use strum::EnumProperty;
 use strum_macros::Display;
 use strum_macros::EnumDiscriminants;

@@ -4,8 +4,8 @@
 use consensus_config::{
     Authority, AuthorityKeyPair, Committee, NetworkKeyPair, ProtocolKeyPair, Stake,
 };
-use insta::assert_yaml_snapshot;
 use haneullabs_network::Multiaddr;
+use insta::assert_yaml_snapshot;
 use rand::{SeedableRng as _, rngs::StdRng};
 
 // Committee is not sent over network or stored on disk itself, but some of its fields are.

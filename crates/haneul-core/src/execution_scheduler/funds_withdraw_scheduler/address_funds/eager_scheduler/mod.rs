@@ -6,10 +6,10 @@ use std::{
     sync::Arc,
 };
 
-use parking_lot::Mutex;
 use haneul_types::{
     accumulator_root::AccumulatorObjId, base_types::SequenceNumber, digests::TransactionDigest,
 };
+use parking_lot::Mutex;
 use tokio::sync::oneshot;
 use tracing::debug;
 

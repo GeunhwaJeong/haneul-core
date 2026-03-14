@@ -4,7 +4,6 @@
 use std::sync::Arc;
 
 use async_graphql::dataloader::DataLoader;
-use prometheus::Registry;
 use haneul_indexer_alt_reader::bigtable_reader::BigtableArgs;
 use haneul_indexer_alt_reader::bigtable_reader::BigtableReader;
 use haneul_indexer_alt_reader::consistent_reader::ConsistentReader;
@@ -15,6 +14,7 @@ use haneul_indexer_alt_reader::package_resolver::PackageCache;
 use haneul_indexer_alt_reader::pg_reader::PgReader;
 use haneul_indexer_alt_reader::pg_reader::db::DbArgs;
 use haneul_package_resolver::Resolver;
+use prometheus::Registry;
 use url::Url;
 
 use crate::config::RpcConfig;

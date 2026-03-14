@@ -4,9 +4,9 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use haneul_futures::service::Service;
 use serde::Deserialize;
 use serde::Serialize;
-use haneul_futures::service::Service;
 use tokio::sync::mpsc;
 use tracing::info;
 

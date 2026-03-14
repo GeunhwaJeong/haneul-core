@@ -11,13 +11,13 @@ use anemo::types::PeerAffinity;
 use anemo::{PeerId, types::PeerInfo};
 use anemo_tower::rate_limit;
 use fastcrypto::traits::KeyPair;
+use haneul_config::p2p::P2pConfig;
+use haneul_types::crypto::NetworkKeyPair;
+use haneul_types::multiaddr::Multiaddr;
 use std::{
     collections::HashMap,
     sync::{Arc, OnceLock, RwLock},
 };
-use haneul_config::p2p::P2pConfig;
-use haneul_types::crypto::NetworkKeyPair;
-use haneul_types::multiaddr::Multiaddr;
 use tap::{Pipe, TapFallible};
 use tokio::{
     sync::{mpsc, oneshot},

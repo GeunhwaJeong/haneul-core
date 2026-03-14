@@ -164,7 +164,13 @@ where
         secret: &dyn Signer<AuthoritySignature>,
         authority: AuthorityName,
     ) -> AuthoritySignInfo {
-        AuthoritySignInfo::new(epoch, &data, Intent::haneul_app(T::SCOPE), authority, secret)
+        AuthoritySignInfo::new(
+            epoch,
+            &data,
+            Intent::haneul_app(T::SCOPE),
+            authority,
+            secret,
+        )
     }
 
     pub fn epoch(&self) -> EpochId {

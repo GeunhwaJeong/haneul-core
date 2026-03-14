@@ -3,11 +3,11 @@
 
 use std::sync::{Arc, Weak};
 
+use haneul_macros::fail_point_async;
+use haneul_types::execution::ExecutionOutput;
 use haneullabs_common::{fatal, random::get_rng};
 use haneullabs_metrics::{monitored_scope, spawn_monitored_task};
 use rand::Rng;
-use haneul_macros::fail_point_async;
-use haneul_types::execution::ExecutionOutput;
 use tokio::sync::{Semaphore, mpsc::UnboundedReceiver, oneshot};
 use tracing::{Instrument, error_span, info, trace, warn};
 

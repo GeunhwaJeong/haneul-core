@@ -3,12 +3,12 @@
 
 use crate::artifacts::{MoveCallInfo, ReplayCacheSummary};
 use anyhow::{Result, anyhow, bail};
+use haneul_types::{effects::TransactionEffects, gas::GasUsageReport};
 use move_trace_format::format::{MoveTrace, MoveTraceReader};
 use std::{
     io::Write,
     path::{Path, PathBuf},
 };
-use haneul_types::{effects::TransactionEffects, gas::GasUsageReport};
 
 pub const ARTIFACTS_ENCODING_EXT: &str = "json";
 pub const ARTIFACTS_ENCODING_COMPRESSION_EXT: &str = "json.zst";

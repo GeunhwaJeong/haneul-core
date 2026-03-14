@@ -4,11 +4,11 @@
 use super::mmr::apply_stream_updates;
 use super::{AuthenticatedEvent, AuthenticatedEventsClient, ClientConfig, ClientError};
 use futures::stream::Stream;
-use haneullabs_common::debug_fatal;
-use std::sync::Arc;
 use haneul_rpc_api::grpc::alpha::event_service_proto::ListAuthenticatedEventsRequest;
 use haneul_types::accumulator_root::{EventCommitment, EventStreamHead};
-use haneul_types::base_types::{ObjectID, HaneulAddress};
+use haneul_types::base_types::{HaneulAddress, ObjectID};
+use haneullabs_common::debug_fatal;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 struct EventStreamState {

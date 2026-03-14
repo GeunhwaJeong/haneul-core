@@ -3,11 +3,11 @@
 
 use crate::ObjectID;
 use crate::base_types::HaneulAddress;
+use haneul_macros::EnumVariantOrder;
 use move_binary_format::file_format::{CodeOffset, TypeParameterIndex};
 use move_core_types::language_storage::ModuleId;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display, Formatter};
-use haneul_macros::EnumVariantOrder;
 use thiserror::Error;
 
 #[cfg(test)]

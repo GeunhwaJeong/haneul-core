@@ -20,6 +20,19 @@ use crate::{
         typing::ast::{self as T, Type},
     },
 };
+use haneul_move_natives::object_runtime::{
+    self, LoadedRuntimeObject, ObjectRuntime, RuntimeResults, get_all_uids, max_event_error,
+};
+use haneul_types::{
+    TypeTag,
+    base_types::{MoveObjectType, ObjectID, SequenceNumber, TxContext},
+    error::{ExecutionError, ExecutionErrorKind, SafeIndex},
+    execution::ExecutionResults,
+    metrics::LimitsMetrics,
+    move_package::{MovePackage, UpgradeCap, UpgradeReceipt, UpgradeTicket},
+    object::{MoveObject, Object, Owner},
+};
+use haneul_verifier::INIT_FN_NAME;
 use indexmap::{IndexMap, IndexSet};
 use move_binary_format::{
     CompiledModule,
@@ -44,19 +57,6 @@ use std::{
     rc::Rc,
     sync::Arc,
 };
-use haneul_move_natives::object_runtime::{
-    self, LoadedRuntimeObject, ObjectRuntime, RuntimeResults, get_all_uids, max_event_error,
-};
-use haneul_types::{
-    TypeTag,
-    base_types::{MoveObjectType, ObjectID, SequenceNumber, TxContext},
-    error::{ExecutionError, ExecutionErrorKind, SafeIndex},
-    execution::ExecutionResults,
-    metrics::LimitsMetrics,
-    move_package::{MovePackage, UpgradeCap, UpgradeReceipt, UpgradeTicket},
-    object::{MoveObject, Object, Owner},
-};
-use haneul_verifier::INIT_FN_NAME;
 use tracing::instrument;
 
 macro_rules! unwrap {
@@ -1109,7 +1109,8 @@ impl<'env, 'pc, 'vm, 'state, 'linkage, 'gas> Context<'env, 'pc, 'vm, 'state, 'li
     fn argument_update(
         &mut self,
         sp!(_, (arg, ty)): T::Argument,
-    ) -> Result<Option<(haneul_types::transaction::Argument, Vec<u8>, TypeTag)>, ExecutionError> {
+    ) -> Result<Option<(haneul_types::transaction::Argument, Vec<u8>, TypeTag)>, ExecutionError>
+    {
         use haneul_types::transaction::Argument as TxArgument;
         let ty = match ty {
             Type::Reference(true, inner) => (*inner).clone(),

@@ -15,11 +15,11 @@ use consensus_core::{
     NetworkType, TransactionClient, TransactionVerifier, to_socket_addr,
 };
 use consensus_types::block::BlockTimestampMs;
+use haneul_protocol_config::ProtocolConfig;
 use haneullabs_metrics::monitored_mpsc::UnboundedReceiver;
 use haneullabs_metrics::monitored_mpsc::unbounded_channel;
 use parking_lot::Mutex;
 use prometheus::Registry;
-use haneul_protocol_config::ProtocolConfig;
 use tempfile::TempDir;
 use tracing::{info, trace};
 

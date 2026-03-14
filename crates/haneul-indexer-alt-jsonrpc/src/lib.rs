@@ -6,11 +6,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context as _;
-use jsonrpsee::server::BatchRequestConfig;
-use jsonrpsee::server::RpcServiceBuilder;
-use jsonrpsee::server::ServerBuilder;
-use prometheus::Registry;
-use serde_json::json;
 use haneul_futures::service::Service;
 use haneul_indexer_alt_reader::bigtable_reader::BigtableArgs;
 use haneul_indexer_alt_reader::consistent_reader::ConsistentReaderArgs;
@@ -18,6 +13,11 @@ use haneul_indexer_alt_reader::pg_reader::db::DbArgs;
 use haneul_indexer_alt_reader::system_package_task::SystemPackageTask;
 use haneul_indexer_alt_reader::system_package_task::SystemPackageTaskArgs;
 use haneul_open_rpc::Project;
+use jsonrpsee::server::BatchRequestConfig;
+use jsonrpsee::server::RpcServiceBuilder;
+use jsonrpsee::server::ServerBuilder;
+use prometheus::Registry;
+use serde_json::json;
 use tower_http::catch_panic;
 use tower_layer::Identity;
 use tracing::info;
@@ -324,6 +324,9 @@ mod tests {
     use std::net::SocketAddr;
     use std::time::Duration;
 
+    use haneul_open_rpc::Module;
+    use haneul_open_rpc_macros::open_rpc;
+    use haneul_pg_db::temp::get_available_port;
     use jsonrpsee::core::RpcResult;
     use jsonrpsee::proc_macros::rpc;
     use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
@@ -331,9 +334,6 @@ mod tests {
     use reqwest::Client;
     use serde_json::Value;
     use serde_json::json;
-    use haneul_open_rpc::Module;
-    use haneul_open_rpc_macros::open_rpc;
-    use haneul_pg_db::temp::get_available_port;
 
     use super::*;
 

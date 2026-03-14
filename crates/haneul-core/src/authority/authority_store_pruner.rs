@@ -6,6 +6,18 @@ use crate::checkpoints::{CheckpointStore, CheckpointWatermark};
 use crate::jsonrpc_index::IndexStore;
 use crate::rpc_index::RpcIndexStore;
 use anyhow::anyhow;
+use haneul_config::node::AuthorityStorePruningConfig;
+use haneul_types::committee::EpochId;
+use haneul_types::effects::TransactionEffects;
+use haneul_types::effects::TransactionEffectsAPI;
+use haneul_types::message_envelope::Message;
+use haneul_types::messages_checkpoint::{
+    CheckpointContents, CheckpointDigest, CheckpointSequenceNumber,
+};
+use haneul_types::{
+    base_types::{ObjectID, SequenceNumber, TransactionDigest, VersionNumber},
+    storage::ObjectKey,
+};
 use haneullabs_metrics::{monitored_scope, spawn_monitored_task};
 use once_cell::sync::Lazy;
 use prometheus::{
@@ -20,18 +32,6 @@ use std::sync::Mutex;
 use std::sync::atomic::AtomicU64;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{sync::Arc, time::Duration};
-use haneul_config::node::AuthorityStorePruningConfig;
-use haneul_types::committee::EpochId;
-use haneul_types::effects::TransactionEffects;
-use haneul_types::effects::TransactionEffectsAPI;
-use haneul_types::message_envelope::Message;
-use haneul_types::messages_checkpoint::{
-    CheckpointContents, CheckpointDigest, CheckpointSequenceNumber,
-};
-use haneul_types::{
-    base_types::{ObjectID, SequenceNumber, TransactionDigest, VersionNumber},
-    storage::ObjectKey,
-};
 use tokio::sync::oneshot::{self, Sender};
 use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
@@ -1005,7 +1005,6 @@ mod tests {
     use crate::authority::authority_store_types::{
         StoreObject, StoreObjectWrapper, get_store_object,
     };
-    use prometheus::Registry;
     use haneul_types::base_types::ObjectDigest;
     use haneul_types::effects::TransactionEffects;
     use haneul_types::effects::TransactionEffectsAPI;
@@ -1014,6 +1013,7 @@ mod tests {
         object::Object,
         storage::ObjectKey,
     };
+    use prometheus::Registry;
     use typed_store::Map;
     use typed_store::rocks::{DBMap, MetricConf, ReadWriteOptions, default_db_options};
 

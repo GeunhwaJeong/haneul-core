@@ -13,6 +13,10 @@ use base64;
 use base64::{Engine as _, engine::general_purpose};
 use bcs;
 use fastcrypto::traits::{EncodeDecodeBase64, VerifyingKey};
+use haneul_types::base_types::HaneulAddress;
+use haneul_types::crypto::{
+    HaneulKeyPair, HaneulSignature, HaneulSignatureInner, PublicKey, Signature,
+};
 use jsonrpc::client::Endpoint;
 use mockall::{automock, predicate::*};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -22,8 +26,6 @@ use std::collections::{BTreeMap, HashSet};
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::process::Stdio;
-use haneul_types::base_types::HaneulAddress;
-use haneul_types::crypto::{PublicKey, Signature, HaneulKeyPair, HaneulSignature, HaneulSignatureInner};
 use tokio::process::Command;
 
 #[derive(Debug)]
@@ -283,7 +285,8 @@ impl External {
     }
 
     pub fn is_indexed(&self, key: &StoredKey) -> bool {
-        self.keys.contains_key(&HaneulAddress::from(&key.public_key))
+        self.keys
+            .contains_key(&HaneulAddress::from(&key.public_key))
     }
 
     pub async fn save_aliases(&self) -> Result<(), Error> {
@@ -402,7 +405,11 @@ impl AccountKeystore for External {
     }
 
     /// Import a keypair into the keystore.
-    async fn import(&mut self, _alias: Option<String>, _keypair: HaneulKeyPair) -> Result<(), Error> {
+    async fn import(
+        &mut self,
+        _alias: Option<String>,
+        _keypair: HaneulKeyPair,
+    ) -> Result<(), Error> {
         Err(anyhow!("Import not supported for external keys."))
     }
 
@@ -664,6 +671,9 @@ mod tests {
     use fastcrypto::ed25519::Ed25519KeyPair;
     use fastcrypto::secp256k1::Secp256k1KeyPair;
     use fastcrypto::traits::{EncodeDecodeBase64, KeyPair, ToFromBytes};
+    use haneul_types::base_types::HaneulAddress;
+    use haneul_types::crypto::SignatureScheme::{ED25519, Secp256k1};
+    use haneul_types::crypto::{HaneulKeyPair, PublicKey, Signature};
     use mockall::predicate::eq;
     use rand::prelude::StdRng;
     use rand::{SeedableRng, thread_rng};
@@ -673,9 +683,6 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::PathBuf;
     use std::str::FromStr;
-    use haneul_types::base_types::HaneulAddress;
-    use haneul_types::crypto::SignatureScheme::{ED25519, Secp256k1};
-    use haneul_types::crypto::{PublicKey, Signature, HaneulKeyPair};
     use tempfile::TempDir;
 
     const PUBLIC_KEY: &str = "ALJ0GaLcBTTwTTh5dvyc6xaxwrjkG1spQzlL+W4CGLqG";

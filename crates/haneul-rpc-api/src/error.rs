@@ -112,9 +112,9 @@ impl From<bcs::Error> for RpcError {
 
 impl From<haneul_types::transaction_driver_types::TransactionSubmissionError> for RpcError {
     fn from(error: haneul_types::transaction_driver_types::TransactionSubmissionError) -> Self {
-        use itertools::Itertools;
         use haneul_types::error::HaneulErrorKind;
         use haneul_types::transaction_driver_types::TransactionSubmissionError::*;
+        use itertools::Itertools;
 
         match error {
             InvalidUserSignature(err) => {

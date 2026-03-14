@@ -15,9 +15,9 @@ use super::*;
 #[cfg(test)]
 use super::shared_object_version_manager::Schedulable;
 #[cfg(test)]
-use std::collections::HashMap;
-#[cfg(test)]
 use haneul_types::transaction::TransactionKey;
+#[cfg(test)]
+use std::collections::HashMap;
 
 // =============================================================================
 // MFP (Mysticeti Fast Path) Test Helpers
@@ -314,7 +314,8 @@ pub async fn init_state_with_objects<I: IntoIterator<Item = Object>>(
     objects: I,
 ) -> Arc<AuthorityState> {
     let dir = tempfile::TempDir::new().unwrap();
-    let network_config = haneul_swarm_config::network_config_builder::ConfigBuilder::new(&dir).build();
+    let network_config =
+        haneul_swarm_config::network_config_builder::ConfigBuilder::new(&dir).build();
     let genesis = network_config.genesis;
     let keypair = network_config.validator_configs[0]
         .protocol_key_pair()

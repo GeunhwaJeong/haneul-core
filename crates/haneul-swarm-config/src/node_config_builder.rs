@@ -22,7 +22,9 @@ use haneul_config::{
     local_ip_utils,
 };
 use haneul_protocol_config::Chain;
-use haneul_types::crypto::{AuthorityKeyPair, AuthorityPublicKeyBytes, NetworkKeyPair, HaneulKeyPair};
+use haneul_types::crypto::{
+    AuthorityKeyPair, AuthorityPublicKeyBytes, HaneulKeyPair, NetworkKeyPair,
+};
 use haneul_types::multiaddr::Multiaddr;
 use haneul_types::supported_protocol_versions::SupportedProtocolVersions;
 use haneul_types::traffic_control::{PolicyConfig, RemoteFirewallConfig};
@@ -219,9 +221,13 @@ impl ValidatorConfigBuilder {
 
         NodeConfig {
             protocol_key_pair: AuthorityKeyPairWithPath::new(validator.key_pair),
-            network_key_pair: KeyPairWithPath::new(HaneulKeyPair::Ed25519(validator.network_key_pair)),
+            network_key_pair: KeyPairWithPath::new(HaneulKeyPair::Ed25519(
+                validator.network_key_pair,
+            )),
             account_key_pair: KeyPairWithPath::new(validator.account_key_pair),
-            worker_key_pair: KeyPairWithPath::new(HaneulKeyPair::Ed25519(validator.worker_key_pair)),
+            worker_key_pair: KeyPairWithPath::new(HaneulKeyPair::Ed25519(
+                validator.worker_key_pair,
+            )),
             db_path,
             network_address,
             metrics_address: validator.metrics_address,
@@ -430,8 +436,9 @@ impl FullnodeConfigBuilder {
 
     pub fn with_network_key_pair(mut self, network_key_pair: Option<NetworkKeyPair>) -> Self {
         if let Some(network_key_pair) = network_key_pair {
-            self.network_key_pair =
-                Some(KeyPairWithPath::new(HaneulKeyPair::Ed25519(network_key_pair)));
+            self.network_key_pair = Some(KeyPairWithPath::new(HaneulKeyPair::Ed25519(
+                network_key_pair,
+            )));
         }
         self
     }

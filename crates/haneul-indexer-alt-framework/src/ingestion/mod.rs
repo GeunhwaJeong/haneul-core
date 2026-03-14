@@ -9,10 +9,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use haneul_futures::service::Service;
 use prometheus::Registry;
 use serde::Deserialize;
 use serde::Serialize;
-use haneul_futures::service::Service;
 use tokio::sync::mpsc;
 
 pub use crate::config::ConcurrencyConfig as IngestConcurrencyConfig;

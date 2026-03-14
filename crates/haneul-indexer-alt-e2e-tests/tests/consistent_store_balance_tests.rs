@@ -8,8 +8,8 @@ use haneul_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::GetBalan
 use haneul_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::ListBalancesRequest;
 use haneul_indexer_alt_consistent_api::proto::rpc::consistent::v1alpha::consistent_service_client::ConsistentServiceClient;
 use haneul_test_transaction_builder::TestTransactionBuilder;
-use haneul_types::base_types::ObjectRef;
 use haneul_types::base_types::HaneulAddress;
+use haneul_types::base_types::ObjectRef;
 use haneul_types::crypto::get_account_key_pair;
 use haneul_types::effects::TransactionEffectsAPI;
 use haneul_types::gas_coin::GAS;
@@ -729,9 +729,10 @@ async fn list_balances(
     });
 
     if let Some(checkpoint) = checkpoint {
-        request
-            .metadata_mut()
-            .insert("x-haneul-checkpoint", checkpoint.to_string().parse().unwrap());
+        request.metadata_mut().insert(
+            "x-haneul-checkpoint",
+            checkpoint.to_string().parse().unwrap(),
+        );
     }
 
     let response = client.list_balances(request).await?.into_inner();
@@ -771,9 +772,10 @@ async fn get_balance(
     });
 
     if let Some(checkpoint) = checkpoint {
-        request
-            .metadata_mut()
-            .insert("x-haneul-checkpoint", checkpoint.to_string().parse().unwrap());
+        request.metadata_mut().insert(
+            "x-haneul-checkpoint",
+            checkpoint.to_string().parse().unwrap(),
+        );
     }
 
     let response = client.get_balance(request).await?.into_inner();
@@ -807,9 +809,10 @@ async fn batch_get_balances(
     });
 
     if let Some(checkpoint) = checkpoint {
-        request
-            .metadata_mut()
-            .insert("x-haneul-checkpoint", checkpoint.to_string().parse().unwrap());
+        request.metadata_mut().insert(
+            "x-haneul-checkpoint",
+            checkpoint.to_string().parse().unwrap(),
+        );
     }
 
     Ok(client

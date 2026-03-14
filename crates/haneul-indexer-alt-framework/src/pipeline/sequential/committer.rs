@@ -5,8 +5,8 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use scoped_futures::ScopedFutureExt;
 use haneul_futures::service::Service;
+use scoped_futures::ScopedFutureExt;
 use tokio::sync::mpsc;
 use tokio::time::MissedTickBehavior;
 use tokio::time::interval;
@@ -399,8 +399,8 @@ mod tests {
     use std::time::Duration;
 
     use async_trait::async_trait;
-    use prometheus::Registry;
     use haneul_types::full_checkpoint_content::Checkpoint;
+    use prometheus::Registry;
     use tokio::sync::mpsc;
 
     use crate::mocks::store::MockConnection;

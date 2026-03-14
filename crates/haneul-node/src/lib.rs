@@ -14,17 +14,6 @@ use arc_swap::ArcSwap;
 use fastcrypto_zkp::bn254::zk_login::JwkId;
 use fastcrypto_zkp::bn254::zk_login::OIDCProvider;
 use futures::future::BoxFuture;
-use haneullabs_common::in_test_configuration;
-use prometheus::Registry;
-use std::collections::{BTreeSet, HashMap, HashSet};
-use std::fmt;
-use std::future::Future;
-use std::path::PathBuf;
-use std::str::FromStr;
-#[cfg(msim)]
-use std::sync::atomic::Ordering;
-use std::sync::{Arc, Weak};
-use std::time::Duration;
 use haneul_core::authority::ExecutionEnv;
 use haneul_core::authority::RandomnessRoundReceiver;
 use haneul_core::authority::authority_store_tables::AuthorityPerpetualTablesOptions;
@@ -38,6 +27,17 @@ use haneul_core::execution_cache::build_execution_cache;
 use haneul_network::endpoint_manager::{AddressSource, EndpointId};
 use haneul_network::validator::server::HANEUL_TLS_SERVER_NAME;
 use haneul_types::full_checkpoint_content::Checkpoint;
+use haneullabs_common::in_test_configuration;
+use prometheus::Registry;
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::fmt;
+use std::future::Future;
+use std::path::PathBuf;
+use std::str::FromStr;
+#[cfg(msim)]
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Weak};
+use std::time::Duration;
 
 use haneul_core::global_state_hasher::GlobalStateHashMetrics;
 use haneul_core::storage::RestReadStore;
@@ -52,8 +52,8 @@ use haneul_types::crypto::RandomnessRound;
 use haneul_types::digests::{
     ChainIdentifier, CheckpointDigest, TransactionDigest, TransactionEffectsDigest,
 };
-use haneul_types::messages_consensus::AuthorityCapabilitiesV2;
 use haneul_types::haneul_system_state::HaneulSystemState;
+use haneul_types::messages_consensus::AuthorityCapabilitiesV2;
 use tap::tap::TapFallible;
 use tokio::sync::oneshot;
 use tokio::sync::{Mutex, broadcast, mpsc};
@@ -77,8 +77,6 @@ macro_rules! jwk_log {
 
 use fastcrypto_zkp::bn254::zk_login::JWK;
 pub use handle::HaneulNodeHandle;
-use haneullabs_metrics::{RegistryService, spawn_monitored_task};
-use haneullabs_service::server_timing::server_timing_middleware;
 use haneul_config::node::{DBCheckpointConfig, RunWithRange};
 use haneul_config::node::{ForkCrashBehavior, ForkRecoveryConfig};
 use haneul_config::node_config_metrics::NodeConfigMetrics;
@@ -147,11 +145,13 @@ use haneul_types::base_types::{AuthorityName, EpochId};
 use haneul_types::committee::Committee;
 use haneul_types::crypto::KeypairTraits;
 use haneul_types::error::{HaneulError, HaneulResult};
-use haneul_types::messages_consensus::{ConsensusTransaction, check_total_jwk_size};
 use haneul_types::haneul_system_state::HaneulSystemStateTrait;
 use haneul_types::haneul_system_state::epoch_start_haneul_system_state::EpochStartSystemState;
 use haneul_types::haneul_system_state::epoch_start_haneul_system_state::EpochStartSystemStateTrait;
+use haneul_types::messages_consensus::{ConsensusTransaction, check_total_jwk_size};
 use haneul_types::supported_protocol_versions::SupportedProtocolVersions;
+use haneullabs_metrics::{RegistryService, spawn_monitored_task};
+use haneullabs_service::server_timing::server_timing_middleware;
 use typed_store::DBMetrics;
 use typed_store::rocks::default_db_options;
 
@@ -181,8 +181,8 @@ pub struct P2pComponents {
 
 #[cfg(msim)]
 mod simulator {
-    use std::sync::atomic::AtomicBool;
     use haneul_types::error::HaneulErrorKind;
+    use std::sync::atomic::AtomicBool;
 
     use super::*;
     pub(super) struct SimState {
@@ -233,14 +233,14 @@ mod simulator {
     }
 }
 
-#[cfg(msim)]
-pub use simulator::set_jwk_injector;
-#[cfg(msim)]
-use simulator::*;
 use haneul_core::authority::authority_store_pruner::PrunerWatermarks;
 use haneul_core::{
     consensus_handler::ConsensusHandlerInitializer, safe_client::SafeClientMetricsBase,
 };
+#[cfg(msim)]
+pub use simulator::set_jwk_injector;
+#[cfg(msim)]
+use simulator::*;
 
 const DEFAULT_GRPC_CONNECT_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -259,7 +259,8 @@ pub struct HaneulNode {
     checkpoint_metrics: Arc<CheckpointMetrics>,
 
     _discovery: discovery::Handle,
-    _connection_monitor_handle: haneullabs_network::anemo_connection_monitor::ConnectionMonitorHandle,
+    _connection_monitor_handle:
+        haneullabs_network::anemo_connection_monitor::ConnectionMonitorHandle,
     state_sync_handle: state_sync::Handle,
     randomness_handle: randomness::Handle,
     checkpoint_store: Arc<CheckpointStore>,
@@ -839,10 +840,11 @@ impl HaneulNode {
             .epoch_start_state()
             .get_authority_names_to_peer_ids();
 
-        let network_connection_metrics = haneullabs_network::quinn_metrics::QuinnConnectionMetrics::new(
-            "haneul",
-            &registry_service.default_registry(),
-        );
+        let network_connection_metrics =
+            haneullabs_network::quinn_metrics::QuinnConnectionMetrics::new(
+                "haneul",
+                &registry_service.default_registry(),
+            );
 
         let authority_names_to_peer_ids = ArcSwap::from_pointee(authority_names_to_peer_ids);
 
@@ -859,7 +861,8 @@ impl HaneulNode {
         };
 
         let connection_monitor_status = Arc::new(connection_monitor_status);
-        let haneul_node_metrics = Arc::new(HaneulNodeMetrics::new(&registry_service.default_registry()));
+        let haneul_node_metrics =
+            Arc::new(HaneulNodeMetrics::new(&registry_service.default_registry()));
 
         haneul_node_metrics
             .binary_max_protocol_version
@@ -1131,8 +1134,11 @@ impl HaneulNode {
                 .merge(state_sync_router);
             let routes = routes.merge(randomness_router);
 
-            let inbound_network_metrics =
-                haneullabs_network::metrics::NetworkMetrics::new("haneul", "inbound", prometheus_registry);
+            let inbound_network_metrics = haneullabs_network::metrics::NetworkMetrics::new(
+                "haneul",
+                "inbound",
+                prometheus_registry,
+            );
             let outbound_network_metrics = haneullabs_network::metrics::NetworkMetrics::new(
                 "haneul",
                 "outbound",
@@ -2583,11 +2589,11 @@ struct HttpServers {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use prometheus::Registry;
-    use std::collections::BTreeMap;
     use haneul_config::node::{ForkCrashBehavior, ForkRecoveryConfig};
     use haneul_core::checkpoints::{CheckpointMetrics, CheckpointStore};
     use haneul_types::digests::{CheckpointDigest, TransactionDigest, TransactionEffectsDigest};
+    use prometheus::Registry;
+    use std::collections::BTreeMap;
 
     #[tokio::test]
     async fn test_fork_error_and_recovery_both_paths() {

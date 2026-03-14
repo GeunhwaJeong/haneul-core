@@ -5,6 +5,10 @@ use crate::{
     data_store::PackageStore,
     static_programmable_transactions::linkage::resolved_linkage::RootedLinkage,
 };
+use haneul_types::{
+    base_types::ObjectID,
+    error::{ExecutionErrorKind, HaneulError},
+};
 use move_binary_format::errors::{Location, PartialVMError, PartialVMResult, VMResult};
 use move_core_types::{
     account_address::AccountAddress,
@@ -14,10 +18,6 @@ use move_core_types::{
     vm_status::StatusCode,
 };
 use move_vm_types::data_store::DataStore;
-use haneul_types::{
-    base_types::ObjectID,
-    error::{ExecutionErrorKind, HaneulError},
-};
 
 /// A `LinkedDataStore` is a wrapper around a `PackageStore` (i.e., a package store where
 /// we can also resolve types to defining IDs) along with a specific `linkage`. These two together
@@ -133,9 +133,9 @@ impl ModuleResolver for LinkedDataStore<'_> {
     type Error = HaneulError;
 
     fn get_module(&self, id: &ModuleId) -> Result<Option<Vec<u8>>, Self::Error> {
-        self.load_module(id)
-            .map(Some)
-            .map_err(|_| HaneulError::from(ExecutionErrorKind::VMVerificationOrDeserializationError))
+        self.load_module(id).map(Some).map_err(|_| {
+            HaneulError::from(ExecutionErrorKind::VMVerificationOrDeserializationError)
+        })
     }
 }
 

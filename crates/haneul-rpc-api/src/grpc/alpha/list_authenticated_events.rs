@@ -9,11 +9,11 @@ use crate::grpc::alpha::event_service_proto::{
     AuthenticatedEvent, ListAuthenticatedEventsRequest, ListAuthenticatedEventsResponse,
 };
 use bytes::Bytes;
-use prost::Message;
-use std::str::FromStr;
 use haneul_macros::fail_point_if;
 use haneul_rpc::proto::haneul::rpc::v2::{Bcs, Event};
 use haneul_types::base_types::HaneulAddress;
+use prost::Message;
+use std::str::FromStr;
 
 const MAX_PAGE_SIZE: u32 = 1000;
 const DEFAULT_PAGE_SIZE: u32 = 1000;

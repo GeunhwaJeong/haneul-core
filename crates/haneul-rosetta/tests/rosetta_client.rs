@@ -20,8 +20,8 @@ use haneul_rosetta::types::{
     AccountBalanceRequest, AccountBalanceResponse, AccountIdentifier, ConstructionCombineRequest,
     ConstructionCombineResponse, ConstructionMetadataRequest, ConstructionMetadataResponse,
     ConstructionPayloadsRequest, ConstructionPayloadsResponse, ConstructionPreprocessRequest,
-    ConstructionPreprocessResponse, ConstructionSubmitRequest, Currencies, NetworkIdentifier,
-    PreprocessMetadata, Signature, SignatureType, SubAccount, SubAccountType, HaneulEnv,
+    ConstructionPreprocessResponse, ConstructionSubmitRequest, Currencies, HaneulEnv,
+    NetworkIdentifier, PreprocessMetadata, Signature, SignatureType, SubAccount, SubAccountType,
     TransactionIdentifierResponse,
 };
 use haneul_rosetta::{RosettaOfflineServer, RosettaOnlineServer};

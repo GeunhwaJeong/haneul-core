@@ -6,6 +6,29 @@ use crate::authority::authority_per_epoch_store::AuthorityPerEpochStore;
 use crate::checkpoints::CheckpointStore;
 use crate::par_index_live_object_set::LiveObjectIndexer;
 use crate::par_index_live_object_set::ParMakeLiveObjectIndexer;
+use haneul_types::HANEUL_ACCUMULATOR_ROOT_OBJECT_ID;
+use haneul_types::base_types::HaneulAddress;
+use haneul_types::base_types::MoveObjectType;
+use haneul_types::base_types::ObjectID;
+use haneul_types::base_types::SequenceNumber;
+use haneul_types::coin::Coin;
+use haneul_types::committee::EpochId;
+use haneul_types::digests::TransactionDigest;
+use haneul_types::effects::{AccumulatorValue, TransactionEffectsAPI};
+use haneul_types::full_checkpoint_content::CheckpointData;
+use haneul_types::haneul_system_state::HaneulSystemStateTrait;
+use haneul_types::layout_resolver::LayoutResolver;
+use haneul_types::messages_checkpoint::CheckpointContents;
+use haneul_types::messages_checkpoint::CheckpointSequenceNumber;
+use haneul_types::object::Data;
+use haneul_types::object::Object;
+use haneul_types::object::Owner;
+use haneul_types::storage::BackingPackageStore;
+use haneul_types::storage::DynamicFieldKey;
+use haneul_types::storage::EpochInfo;
+use haneul_types::storage::TransactionInfo;
+use haneul_types::storage::error::Error as StorageError;
+use haneul_types::transaction::{TransactionDataAPI, TransactionKind};
 use itertools::Itertools;
 use move_core_types::language_storage::{StructTag, TypeTag};
 use rayon::iter::IntoParallelIterator;
@@ -19,29 +42,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
-use haneul_types::HANEUL_ACCUMULATOR_ROOT_OBJECT_ID;
-use haneul_types::base_types::MoveObjectType;
-use haneul_types::base_types::ObjectID;
-use haneul_types::base_types::SequenceNumber;
-use haneul_types::base_types::HaneulAddress;
-use haneul_types::coin::Coin;
-use haneul_types::committee::EpochId;
-use haneul_types::digests::TransactionDigest;
-use haneul_types::effects::{AccumulatorValue, TransactionEffectsAPI};
-use haneul_types::full_checkpoint_content::CheckpointData;
-use haneul_types::layout_resolver::LayoutResolver;
-use haneul_types::messages_checkpoint::CheckpointContents;
-use haneul_types::messages_checkpoint::CheckpointSequenceNumber;
-use haneul_types::object::Data;
-use haneul_types::object::Object;
-use haneul_types::object::Owner;
-use haneul_types::storage::BackingPackageStore;
-use haneul_types::storage::DynamicFieldKey;
-use haneul_types::storage::EpochInfo;
-use haneul_types::storage::TransactionInfo;
-use haneul_types::storage::error::Error as StorageError;
-use haneul_types::haneul_system_state::HaneulSystemStateTrait;
-use haneul_types::transaction::{TransactionDataAPI, TransactionKind};
 use sysinfo::{MemoryRefreshKind, RefreshKind, System};
 use tracing::{debug, info, warn};
 use typed_store::DBMapUtils;
@@ -762,8 +762,9 @@ impl IndexStoreTables {
             return Ok(());
         };
 
-        let system_state = haneul_types::haneul_system_state::get_haneul_system_state(authority_store)
-            .map_err(|e| StorageError::custom(format!("Failed to find system state: {e}")))?;
+        let system_state =
+            haneul_types::haneul_system_state::get_haneul_system_state(authority_store)
+                .map_err(|e| StorageError::custom(format!("Failed to find system state: {e}")))?;
 
         let mut epoch = self.epochs.get(&checkpoint.epoch)?.unwrap_or_default();
         epoch.epoch = checkpoint.epoch;
@@ -1844,8 +1845,8 @@ fn get_address_balance_info(object: &Object) -> Option<(HaneulAddress, StructTag
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::AtomicU64;
     use haneul_types::base_types::HaneulAddress;
+    use std::sync::atomic::AtomicU64;
 
     #[tokio::test]
     async fn test_events_compaction_filter() {

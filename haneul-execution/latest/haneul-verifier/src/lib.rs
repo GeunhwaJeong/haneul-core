@@ -12,10 +12,10 @@ pub mod private_generics;
 pub mod private_generics_verifier_v2;
 pub mod struct_with_key_verifier;
 
+use haneul_types::error::{ExecutionError, ExecutionErrorKind};
 use move_core_types::{
     account_address::AccountAddress, ident_str, identifier::IdentStr, vm_status::StatusCode,
 };
-use haneul_types::error::{ExecutionError, ExecutionErrorKind};
 
 pub const INIT_FN_NAME: &IdentStr = ident_str!("init");
 pub const TEST_SCENARIO_MODULE_NAME: &str = "test_scenario";

@@ -12,16 +12,16 @@ use crate::workloads::workload::{
 use crate::workloads::{Gas, WorkloadBuilderInfo, WorkloadParams};
 use crate::{ExecutionEffects, ValidatorProxy};
 use async_trait::async_trait;
-use std::sync::Arc;
 use haneul_test_transaction_builder::TestTransactionBuilder;
 use haneul_types::crypto::{AccountKeyPair, get_key_pair};
 use haneul_types::object::Owner;
 use haneul_types::transaction::{CallArg, ObjectArg, SharedObjectMutability};
-use haneul_types::{Identifier, HANEUL_RANDOMNESS_STATE_OBJECT_ID};
+use haneul_types::{HANEUL_RANDOMNESS_STATE_OBJECT_ID, Identifier};
 use haneul_types::{
     base_types::{ObjectID, SequenceNumber},
     transaction::Transaction,
 };
+use std::sync::Arc;
 use tracing::{error, info};
 
 /// The max amount of gas units needed for a payload.

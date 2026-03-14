@@ -10,7 +10,7 @@ use crate::{
         AbilitySet, DottedUsage, Fields, Friend, ModuleAccess_, ModuleIdent, ModuleIdent_,
         Mutability, Value_, Visibility,
     },
-    ice, ice_assert,
+    haneul_mode, ice, ice_assert,
     naming::ast::{
         self as N, ANYTHING_TYPE, BlockLabel, DatatypeTypeParameter, Function, IndexSyntaxMethods,
         ResolvedUseFuns, TParam, TParamID, Type, Type_, TypeInner as TI, TypeName, TypeName_,
@@ -31,7 +31,6 @@ use crate::{
         unique_map::UniqueMap,
         *,
     },
-    haneul_mode,
     typing::{
         ast::{self as T},
         core::{

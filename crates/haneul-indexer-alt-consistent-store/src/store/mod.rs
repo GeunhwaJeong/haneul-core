@@ -9,12 +9,12 @@ use std::time::Duration;
 use anyhow::Context as _;
 use anyhow::anyhow;
 use anyhow::bail;
-use prometheus::Registry;
-use scoped_futures::ScopedBoxFuture;
 use haneul_indexer_alt_framework::service::Service;
 use haneul_indexer_alt_framework::store::CommitterWatermark;
 use haneul_indexer_alt_framework::store::Store as _;
 use haneul_indexer_alt_framework::store::{self};
+use prometheus::Registry;
+use scoped_futures::ScopedBoxFuture;
 
 use crate::db::Db;
 use crate::db::Watermark;
@@ -235,9 +235,9 @@ impl<S> Clone for Store<S> {
 mod tests {
     use std::future::Future;
 
-    use scoped_futures::ScopedFutureExt;
     use haneul_indexer_alt_framework::store::Connection as _;
     use haneul_indexer_alt_framework::store::TransactionalStore;
+    use scoped_futures::ScopedFutureExt;
     use tokio::time::error::Elapsed;
     use tokio::time::{self};
 

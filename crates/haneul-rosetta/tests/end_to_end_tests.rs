@@ -2,6 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::{Result, anyhow};
+use haneul_keys::keystore::AccountKeystore;
+use haneul_rosetta::CoinMetadataCache;
+use haneul_rosetta::operations::Operations;
+use haneul_rosetta::types::{
+    AccountBalanceRequest, AccountBalanceResponse, AccountIdentifier, Currency, HaneulEnv,
+    NetworkIdentifier, SubAccount, SubAccountType,
+};
+use haneul_rosetta::types::{Currencies, OperationType, TransactionIdentifierResponse};
+use haneul_rpc::client::Client as GrpcClient;
+use haneul_rpc::field::FieldMaskUtil;
+use haneul_rpc::proto::haneul::rpc::v2::{
+    GetCheckpointRequest, GetEpochRequest, GetTransactionRequest,
+};
 use prost_types::FieldMask;
 use rosetta_client::start_rosetta_test_server;
 use serde_json::json;
@@ -9,31 +22,22 @@ use shared_crypto::intent::Intent;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::str::FromStr;
-use haneul_keys::keystore::AccountKeystore;
-use haneul_rosetta::CoinMetadataCache;
-use haneul_rosetta::operations::Operations;
-use haneul_rosetta::types::{
-    AccountBalanceRequest, AccountBalanceResponse, AccountIdentifier, Currency, NetworkIdentifier,
-    SubAccount, SubAccountType, HaneulEnv,
-};
-use haneul_rosetta::types::{Currencies, OperationType, TransactionIdentifierResponse};
-use haneul_rpc::client::Client as GrpcClient;
-use haneul_rpc::field::FieldMaskUtil;
-use haneul_rpc::proto::haneul::rpc::v2::{GetCheckpointRequest, GetEpochRequest, GetTransactionRequest};
 
 mod test_utils;
-use haneul_swarm_config::genesis_config::{DEFAULT_GAS_AMOUNT, DEFAULT_NUMBER_OF_OBJECT_PER_ACCOUNT};
-use haneul_types::base_types::{ObjectID, ObjectRef, HaneulAddress};
+use haneul_swarm_config::genesis_config::{
+    DEFAULT_GAS_AMOUNT, DEFAULT_NUMBER_OF_OBJECT_PER_ACCOUNT,
+};
+use haneul_types::base_types::{HaneulAddress, ObjectID, ObjectRef};
 use haneul_types::governance::ADD_STAKE_MUL_COIN_FUN_NAME;
+use haneul_types::haneul_system_state::HANEUL_SYSTEM_MODULE_NAME;
 use haneul_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use haneul_types::rpc_proto_conversions::ObjectReferenceExt;
-use haneul_types::haneul_system_state::HANEUL_SYSTEM_MODULE_NAME;
 use haneul_types::transaction::{
     Argument, CallArg, Command, InputObjectKind, ObjectArg, TEST_ONLY_GAS_UNIT_FOR_TRANSFER,
     Transaction, TransactionData,
 };
 use haneul_types::utils::to_sender_signed_transaction;
-use haneul_types::{Identifier, HANEUL_SYSTEM_PACKAGE_ID};
+use haneul_types::{HANEUL_SYSTEM_PACKAGE_ID, Identifier};
 use test_cluster::TestClusterBuilder;
 use test_utils::{
     execute_transaction, get_all_coins, get_object_ref, get_random_haneul, wait_for_transaction,
@@ -932,7 +936,8 @@ async fn test_balance_from_obj_paid_eq_gas() {
     let mut balance_change = BalanceChange::default();
     balance_change.address = Some(RECIPIENT.to_string());
     balance_change.coin_type = Some(
-        "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL".to_string(),
+        "0x0000000000000000000000000000000000000000000000000000000000000002::haneul::HANEUL"
+            .to_string(),
     );
     balance_change.amount = Some(AMOUNT.to_string());
     executed_transaction.balance_changes = vec![balance_change];

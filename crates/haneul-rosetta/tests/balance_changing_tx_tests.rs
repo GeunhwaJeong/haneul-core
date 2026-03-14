@@ -4,16 +4,6 @@
 mod test_utils;
 
 use anyhow::anyhow;
-use move_core_types::identifier::Identifier;
-use prost_types::FieldMask;
-use rand::seq::{IteratorRandom, SliceRandom};
-use serde_json::json;
-use shared_crypto::intent::Intent;
-use signature::rand_core::OsRng;
-use std::collections::{BTreeMap, HashMap};
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
-use std::str::FromStr;
 use haneul_keys::keystore::AccountKeystore;
 use haneul_keys::keystore::Keystore;
 use haneul_move_build::BuildConfig;
@@ -26,18 +16,30 @@ use haneul_rpc::proto::haneul::rpc::v2::{
     ExecutedTransaction, GetBalanceRequest, GetEpochRequest, GetTransactionRequest,
 };
 use haneul_types::HANEUL_SYSTEM_PACKAGE_ID;
-use haneul_types::base_types::{FullObjectRef, ObjectRef, HaneulAddress};
+use haneul_types::base_types::{FullObjectRef, HaneulAddress, ObjectRef};
 use haneul_types::gas_coin::GAS;
-use haneul_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use haneul_types::haneul_system_state::HANEUL_SYSTEM_MODULE_NAME;
+use haneul_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use haneul_types::transaction::{
     CallArg, InputObjectKind, ObjectArg, ProgrammableTransaction, TEST_ONLY_GAS_UNIT_FOR_GENERIC,
     TEST_ONLY_GAS_UNIT_FOR_HEAVY_COMPUTATION_STORAGE, TEST_ONLY_GAS_UNIT_FOR_SPLIT_COIN,
     TEST_ONLY_GAS_UNIT_FOR_STAKING, TEST_ONLY_GAS_UNIT_FOR_TRANSFER, Transaction, TransactionData,
     TransactionDataAPI, TransactionKind,
 };
+use move_core_types::identifier::Identifier;
+use prost_types::FieldMask;
+use rand::seq::{IteratorRandom, SliceRandom};
+use serde_json::json;
+use shared_crypto::intent::Intent;
+use signature::rand_core::OsRng;
+use std::collections::{BTreeMap, HashMap};
+use std::num::NonZeroUsize;
+use std::path::PathBuf;
+use std::str::FromStr;
 use test_cluster::TestClusterBuilder;
-use test_utils::{execute_transaction, find_module_object, find_published_package, get_random_haneul};
+use test_utils::{
+    execute_transaction, find_module_object, find_published_package, get_random_haneul,
+};
 
 #[tokio::test]
 async fn test_transfer_haneul() {
@@ -783,7 +785,8 @@ fn extract_balance_changes_from_ops(ops: Operations) -> HashMap<HaneulAddress, i
                         if let (Some(addr), Some(amount)) = (op.account, op.amount) {
                             // Todo: amend this method and tests to cover other coin types too (eg. test_publish_and_move_call also mints MY_COIN)
                             if amount.currency.metadata.coin_type
-                                == haneul_types::TypeTag::from(GAS::type_()).to_canonical_string(true)
+                                == haneul_types::TypeTag::from(GAS::type_())
+                                    .to_canonical_string(true)
                             {
                                 *changes.entry(addr.address).or_default() += amount.value
                             }

@@ -7,20 +7,20 @@ use crate::config::{BridgeClientConfig, BridgeNodeConfig, WatchdogConfig};
 use crate::crypto::BridgeAuthorityPublicKeyBytes;
 use crate::eth_syncer::EthSyncer;
 use crate::events::init_all_struct_tags;
+use crate::haneul_bridge_watchdog::eth_bridge_status::EthBridgeStatus;
+use crate::haneul_bridge_watchdog::eth_vault_balance::{EthereumVaultBalance, VaultAsset};
+use crate::haneul_bridge_watchdog::haneul_bridge_status::HaneulBridgeStatus;
+use crate::haneul_bridge_watchdog::metrics::WatchdogMetrics;
+use crate::haneul_bridge_watchdog::total_supplies::TotalSupplies;
+use crate::haneul_bridge_watchdog::{BridgeWatchDog, Observable};
+use crate::haneul_client::HaneulBridgeClient;
+use crate::haneul_syncer::HaneulSyncer;
 use crate::metrics::BridgeMetrics;
 use crate::monitor::{self, BridgeMonitor};
 use crate::orchestrator::BridgeOrchestrator;
 use crate::server::handler::BridgeRequestHandler;
 use crate::server::{BridgeNodePublicMetadata, run_server};
 use crate::storage::BridgeOrchestratorTables;
-use crate::haneul_bridge_watchdog::eth_bridge_status::EthBridgeStatus;
-use crate::haneul_bridge_watchdog::eth_vault_balance::{EthereumVaultBalance, VaultAsset};
-use crate::haneul_bridge_watchdog::metrics::WatchdogMetrics;
-use crate::haneul_bridge_watchdog::haneul_bridge_status::HaneulBridgeStatus;
-use crate::haneul_bridge_watchdog::total_supplies::TotalSupplies;
-use crate::haneul_bridge_watchdog::{BridgeWatchDog, Observable};
-use crate::haneul_client::HaneulBridgeClient;
-use crate::haneul_syncer::HaneulSyncer;
 use crate::types::BridgeCommittee;
 use crate::utils::{
     EthProvider, get_committee_voting_power_by_name, get_eth_contract_addresses,
@@ -28,17 +28,17 @@ use crate::utils::{
 };
 use alloy::primitives::Address as EthAddress;
 use arc_swap::ArcSwap;
-use haneullabs_metrics::spawn_logged_monitored_task;
-use std::collections::{BTreeMap, HashMap};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::sync::Arc;
-use std::time::Duration;
 use haneul_types::Identifier;
 use haneul_types::bridge::{
     BRIDGE_COMMITTEE_MODULE_NAME, BRIDGE_LIMITER_MODULE_NAME, BRIDGE_MODULE_NAME,
     BRIDGE_TREASURY_MODULE_NAME,
 };
 use haneul_types::event::EventID;
+use haneullabs_metrics::spawn_logged_monitored_task;
+use std::collections::{BTreeMap, HashMap};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::task::JoinHandle;
 use tracing::info;
 
@@ -114,7 +114,8 @@ pub async fn run_bridge_node(
         handles.extend(client_components);
     }
 
-    let committee_name_mapping = get_committee_voting_power_by_name(&committee, &haneul_system).await;
+    let committee_name_mapping =
+        get_committee_voting_power_by_name(&committee, &haneul_system).await;
     for (name, voting_power) in committee_name_mapping.into_iter() {
         metrics
             .current_bridge_voting_rights
@@ -392,7 +393,10 @@ async fn get_next_sequence_number<C: crate::haneul_client::HaneulClientInner>(
     }
 
     if let Some(event_id) = last_processed_bridge_event_id {
-        match haneul_client.get_sequence_number_from_event_id(event_id).await {
+        match haneul_client
+            .get_sequence_number_from_event_id(event_id)
+            .await
+        {
             Ok(Some(sequence_number)) => {
                 let next = sequence_number + 1;
                 info!(
@@ -434,7 +438,10 @@ fn get_haneul_modules_to_watch(
         BRIDGE_LIMITER_MODULE_NAME.to_owned(),
     ];
     if let Some(cursor) = haneul_bridge_module_last_processed_event_id_override {
-        info!("Overriding cursor for haneul bridge modules to {:?}", cursor);
+        info!(
+            "Overriding cursor for haneul bridge modules to {:?}",
+            cursor
+        );
         return HashMap::from_iter(
             haneul_bridge_modules
                 .iter()
@@ -514,8 +521,8 @@ mod tests {
     use haneul_types::base_types::HaneulAddress;
     use haneul_types::bridge::BridgeChainId;
     use haneul_types::crypto::EncodeDecodeBase64;
-    use haneul_types::crypto::KeypairTraits;
     use haneul_types::crypto::HaneulKeyPair;
+    use haneul_types::crypto::KeypairTraits;
     use haneul_types::crypto::get_key_pair;
     use haneul_types::digests::TransactionDigest;
     use haneul_types::event::EventID;

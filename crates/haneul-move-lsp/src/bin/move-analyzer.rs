@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use clap::*;
+use haneul_package_alt::HaneulFlavor;
 use move_analyzer::analyzer;
 use move_compiler::editions::Flavor;
-use haneul_package_alt::HaneulFlavor;
 
 #[cfg(target_os = "linux")]
 mod alloc_utils {

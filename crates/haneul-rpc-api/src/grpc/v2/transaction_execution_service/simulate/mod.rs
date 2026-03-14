@@ -5,7 +5,6 @@ use crate::ErrorReason;
 use crate::Result;
 use crate::RpcError;
 use crate::RpcService;
-use itertools::Itertools;
 use haneul_protocol_config::ProtocolConfig;
 use haneul_rpc::field::FieldMaskTree;
 use haneul_rpc::merge::Merge;
@@ -23,6 +22,7 @@ use haneul_types::effects::TransactionEffectsAPI;
 use haneul_types::transaction::TransactionDataAPI;
 use haneul_types::transaction_executor::SimulateTransactionResult;
 use haneul_types::transaction_executor::TransactionChecks;
+use itertools::Itertools;
 
 mod resolve;
 
@@ -334,7 +334,8 @@ fn estimate_gas_budget_from_gas_cost(
         };
 
     // Convert gas loading cost to GEUNHWA
-    let gas_loading_cost_geunhwa = rounded_gas_loading_cost_units.saturating_mul(reference_gas_price);
+    let gas_loading_cost_geunhwa =
+        rounded_gas_loading_cost_units.saturating_mul(reference_gas_price);
 
     // Calculate safe overhead buffer in GEUNHWA
     let safe_overhead_geunhwa = GAS_SAFE_OVERHEAD.saturating_mul(reference_gas_price);

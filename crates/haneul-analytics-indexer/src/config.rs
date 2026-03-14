@@ -6,12 +6,12 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use serde::Deserialize;
-use serde::Serialize;
 use haneul_indexer_alt_framework::config::ConcurrencyConfig;
 use haneul_indexer_alt_framework::ingestion::{IngestConcurrencyConfig, IngestionConfig};
 use haneul_indexer_alt_framework::pipeline::CommitterConfig;
 use haneul_indexer_alt_framework::pipeline::sequential::SequentialConfig;
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::pipeline::Pipeline;
 
