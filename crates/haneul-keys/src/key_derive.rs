@@ -19,14 +19,14 @@ use haneul_types::{
 };
 use slip10_ed25519::derive_ed25519_private_key;
 
-pub const DERIVATION_PATH_COIN_TYPE: u32 = 784;
+pub const DERIVATION_PATH_COIN_TYPE: u32 = 8282;
 pub const DERVIATION_PATH_PURPOSE_ED25519: u32 = 44;
 pub const DERVIATION_PATH_PURPOSE_SECP256K1: u32 = 54;
 pub const DERVIATION_PATH_PURPOSE_SECP256R1: u32 = 74;
 
-/// Ed25519 follows SLIP-0010 using hardened path: m/44'/784'/0'/0'/{index}'
-/// Secp256k1 follows BIP-32/44 using path where the first 3 levels are hardened: m/54'/784'/0'/0/{index}
-/// Secp256r1 follows BIP-32/44 using path where the first 3 levels are hardened: m/74'/784'/0'/0/{index}
+/// Ed25519 follows SLIP-0010 using hardened path: m/44'/8282'/0'/0'/{index}'
+/// Secp256k1 follows BIP-32/44 using path where the first 3 levels are hardened: m/54'/8282'/0'/0/{index}
+/// Secp256r1 follows BIP-32/44 using path where the first 3 levels are hardened: m/74'/8282'/0'/0/{index}
 /// Note that the purpose node is used to distinguish signature schemes.
 pub fn derive_key_pair_from_path(
     seed: &[u8],
@@ -79,7 +79,7 @@ pub fn validate_path(
         SignatureScheme::ED25519 => {
             match path {
                 Some(p) => {
-                    // The derivation path must be hardened at all levels with purpose = 44, coin_type = 784
+                    // The derivation path must be hardened at all levels with purpose = 44, coin_type = 8282
                     if let &[purpose, coin_type, account, change, address] = p.as_ref() {
                         if Some(purpose)
                             == ChildNumber::new(DERVIATION_PATH_PURPOSE_ED25519, true).ok()
@@ -115,7 +115,7 @@ pub fn validate_path(
         SignatureScheme::Secp256k1 => {
             match path {
                 Some(p) => {
-                    // The derivation path must be hardened at first 3 levels with purpose = 54, coin_type = 784
+                    // The derivation path must be hardened at first 3 levels with purpose = 54, coin_type = 8282
                     if let &[purpose, coin_type, account, change, address] = p.as_ref() {
                         if Some(purpose)
                             == ChildNumber::new(DERVIATION_PATH_PURPOSE_SECP256K1, true).ok()
@@ -151,7 +151,7 @@ pub fn validate_path(
         SignatureScheme::Secp256r1 => {
             match path {
                 Some(p) => {
-                    // The derivation path must be hardened at first 3 levels with purpose = 74, coin_type = 784
+                    // The derivation path must be hardened at first 3 levels with purpose = 74, coin_type = 8282
                     if let &[purpose, coin_type, account, change, address] = p.as_ref() {
                         if Some(purpose)
                             == ChildNumber::new(DERVIATION_PATH_PURPOSE_SECP256R1, true).ok()

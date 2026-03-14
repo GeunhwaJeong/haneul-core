@@ -38,7 +38,7 @@ The `purpose` level distinguishes different signing schemes:
 
 BIP-49 and BIP-84, for example, are used to identify script types in Bitcoin. Haneul chose `54` to indicate ECDSA Secp256k1 because there is no existing BIP under `54`, avoiding confusion with any Bitcoin standard.
 
-The `coin_type` value is managed with a repository of all other cryptocurrencies. Both signature schemes use Haneul's registered `coin_type`: `784`.
+The `coin_type` value is managed with a repository of all other cryptocurrencies. Both signature schemes use Haneul's registered `coin_type`: `8282`.
 
 The `account` level is used for logically separating user accounts and creating specific account categories.
 
@@ -46,9 +46,9 @@ Account-based currencies define only the first 3 levels, while UTXO-based curren
 
 | Scheme          | Path                                         | Comments                                       |
 | --------------- | -------------------------------------------- | ---------------------------------------------- |
-| Ed25519         | `m/44'/784'/{account}'/{change}'/{address}'` | Each level of the derivation path is hardened. |
-| ECDSA Secp256k1 | `m/54'/784'/{account}'/{change}/{address}`   | The first 3 levels are hardened.           |
-| ECDSA Secp256r1 | `m/74'/784'/{account}'/{change}/{address}`   | The first 3 levels are hardened.           |
+| Ed25519         | `m/44'/8282'/{account}'/{change}'/{address}'` | Each level of the derivation path is hardened. |
+| ECDSA Secp256k1 | `m/54'/8282'/{account}'/{change}/{address}`   | The first 3 levels are hardened.           |
+| ECDSA Secp256r1 | `m/74'/8282'/{account}'/{change}/{address}`   | The first 3 levels are hardened.           |
 
 ### Mnemonics support
 
@@ -154,16 +154,16 @@ The [Haneul CLI tool](/guides/developer/getting-started/haneul-install.mdx) and 
 <Tabs>
 <TabItem value="cli" label="CLI">
 ```sh
-$ haneul keytool import "TEST_MNEMONIC" ed25519 "m/44'/784'/0'/0'/0'"
+$ haneul keytool import "TEST_MNEMONIC" ed25519 "m/44'/8282'/0'/0'/0'"
 ```
 ```sh
-$ haneul client new-address ed25519 "m/44'/784'/0'/0'/0'"
+$ haneul client new-address ed25519 "m/44'/8282'/0'/0'/0'"
 ```
 
 </TabItem>
 <TabItem value="typescript" label="TypeScript">
 ```typescript
-const keypair = Ed25519Keypair.deriveKeypair(TEST_MNEMONIC, `m/44'/784'/0'/0'/0'`);
+const keypair = Ed25519Keypair.deriveKeypair(TEST_MNEMONIC, `m/44'/8282'/0'/0'/0'`);
 const address = keypair.getPublicKey().toHaneulAddress();
 ```
 
