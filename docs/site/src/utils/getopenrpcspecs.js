@@ -20,7 +20,7 @@ const downloadFile = (branch) => {
     }
     axios({
         method: "get",
-        url: `https://raw.githubusercontent.com/HaneulLabs/haneul/${branch}/crates/haneul-open-rpc/spec/openrpc.json`,
+        url: `https://raw.githubusercontent.com/GeunhwaJeong/haneul/${branch}/crates/haneul-open-rpc/spec/openrpc.json`,
         responseType: "blob"
     }).then((res) => {
         if (fs.existsSync(path.join(__dirname, `../open-spec/${branch}/openrpc_backup.json`))){

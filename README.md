@@ -1,11 +1,11 @@
 <p align="center">
-<img src="https://raw.githubusercontent.com/HaneulLabs/haneul/refs/heads/main/docs/site/static/img/logo.svg" alt="Logo" width="100" height="100">
+<img src="https://raw.githubusercontent.com/GeunhwaJeong/haneul/refs/heads/main/docs/site/static/img/logo.svg" alt="Logo" width="100" height="100">
 </p>
 
 # Welcome to Haneul
 
-[![Github release](https://img.shields.io/github/v/release/HaneulLabs/haneul.svg?sort=semver)](https://github.com/GeunhwaJeong/haneul/releases/latest)
-[![License](https://img.shields.io/github/license/HaneulLabs/haneul)](https://github.com/GeunhwaJeong/haneul/blob/main/LICENSE)
+[![Github release](https://img.shields.io/github/v/release/GeunhwaJeong/haneul.svg?sort=semver)](https://github.com/GeunhwaJeong/haneul/releases/latest)
+[![License](https://img.shields.io/github/license/GeunhwaJeong/haneul)](https://github.com/GeunhwaJeong/haneul/blob/main/LICENSE)
 
 [Haneul](https://haneul.io) is a next-generation smart contract platform with high throughput, low latency, and an asset-oriented programming model powered by the [Move programming language](https://github.com/GeunhwaJeong/awesome-move).
 

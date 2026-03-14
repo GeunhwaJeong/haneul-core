@@ -185,7 +185,7 @@ function fetchGitHubReleases() {
   return new Promise((resolve, reject) => {
     const options = {
       hostname: 'api.github.com',
-      path: '/repos/HaneulLabs/haneul/releases?per_page=100',
+      path: '/repos/GeunhwaJeong/haneul/releases?per_page=100',
       method: 'GET',
       headers: {
         'User-Agent': 'Node.js Script',

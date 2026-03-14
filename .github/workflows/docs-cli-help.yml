@@ -23,7 +23,7 @@ jobs:
       - name: Determine latest Haneul release tag
         id: release
         run: |
-          TAG=$(curl -s https://api.github.com/repos/HaneulLabs/haneul/releases \
+          TAG=$(curl -s https://api.github.com/repos/GeunhwaJeong/haneul/releases \
             | jq -r 'map(select(.tag_name | startswith("testnet-")))[0].tag_name')
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
@@ -75,7 +75,7 @@ jobs:
           if [ "$DOWNLOADED" = false ]; then
             echo "Failed to download haneul binary from any known location"
             echo "Available assets for ${TAG}:"
-            curl -s "https://api.github.com/repos/HaneulLabs/haneul/releases/tags/${TAG}" | jq -r '.assets[].name'
+            curl -s "https://api.github.com/repos/GeunhwaJeong/haneul/releases/tags/${TAG}" | jq -r '.assets[].name'
             exit 1
           fi
           
