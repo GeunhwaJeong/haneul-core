@@ -87,13 +87,6 @@ members = [
   "consensus/types",
   "crates/anemo-benchmark",
   "crates/bin-version",
-  "crates/haneullabs-common",
-  "crates/haneullabs-metrics",
-  "crates/haneullabs-network",
-  "crates/haneullabs-service",
-  "crates/prometheus-closure-metric",
-  "crates/shared-crypto",
-  "crates/simulacrum",
   "crates/haneul",
   "crates/haneul-adapter-transactional-tests",
   "crates/haneul-analytics-indexer",
@@ -198,6 +191,13 @@ members = [
   "crates/haneul-types",
   "crates/haneul-upgrade-compatibility-transactional-tests",
   "crates/haneul-verifier-transactional-tests",
+  "crates/haneullabs-common",
+  "crates/haneullabs-metrics",
+  "crates/haneullabs-network",
+  "crates/haneullabs-service",
+  "crates/prometheus-closure-metric",
+  "crates/shared-crypto",
+  "crates/simulacrum",
   "crates/telemetry-subscribers",
   "crates/test-cluster",
   "crates/transaction-fuzzer",
@@ -669,13 +669,6 @@ haneul-rpc = { git = "https://github.com/GeunhwaJeong/haneul-rust-sdk.git", rev 
 ### Workspace Members ###
 anemo-benchmark = { path = "crates/anemo-benchmark" }
 bin-version = { path = "crates/bin-version" }
-haneullabs-common = { path = "crates/haneullabs-common" }
-haneullabs-metrics = { path = "crates/haneullabs-metrics" }
-haneullabs-network = { path = "crates/haneullabs-network" }
-haneullabs-service = { path = "crates/haneullabs-service" }
-prometheus-closure-metric = { path = "crates/prometheus-closure-metric" }
-shared-crypto = { path = "crates/shared-crypto" }
-simulacrum = { path = "crates/simulacrum" }
 haneul = { path = "crates/haneul" }
 haneul-adapter-transactional-tests = { path = "crates/haneul-adapter-transactional-tests" }
 haneul-analytics-indexer = { path = "crates/haneul-analytics-indexer" }
@@ -697,10 +690,10 @@ haneul-enum-compat-util = { path = "crates/haneul-enum-compat-util" }
 haneul-faucet = { path = "crates/haneul-faucet" }
 haneul-field-count = { path = "crates/haneul-field-count" }
 haneul-field-count-derive = { path = "crates/haneul-field-count-derive" }
-haneul-futures = { path = "crates/haneul-futures" }
 haneul-framework = { path = "crates/haneul-framework" }
 haneul-framework-snapshot = { path = "crates/haneul-framework-snapshot" }
 haneul-framework-tests = { path = "crates/haneul-framework-tests" }
+haneul-futures = { path = "crates/haneul-futures" }
 haneul-genesis-builder = { path = "crates/haneul-genesis-builder" }
 haneul-http = { path = "crates/haneul-http" }
 haneul-indexer-alt = { path = "crates/haneul-indexer-alt" }
@@ -711,17 +704,17 @@ haneul-indexer-alt-framework-store-traits = { path = "crates/haneul-indexer-alt-
 haneul-indexer-alt-graphql = { path = "crates/haneul-indexer-alt-graphql" }
 haneul-indexer-alt-jsonrpc = { path = "crates/haneul-indexer-alt-jsonrpc" }
 haneul-indexer-alt-metrics = { path = "crates/haneul-indexer-alt-metrics" }
+haneul-indexer-alt-object-store = { path = "crates/haneul-indexer-alt-object-store" }
 haneul-indexer-alt-reader = { path = "crates/haneul-indexer-alt-reader" }
 haneul-indexer-alt-restorer = { path = "crates/haneul-indexer-alt-restorer" }
 haneul-indexer-alt-schema = { path = "crates/haneul-indexer-alt-schema" }
-haneul-indexer-alt-object-store = { path = "crates/haneul-indexer-alt-object-store" }
 haneul-json = { path = "crates/haneul-json" }
 haneul-json-rpc = { path = "crates/haneul-json-rpc" }
 haneul-json-rpc-api = { path = "crates/haneul-json-rpc-api" }
 haneul-json-rpc-types = { path = "crates/haneul-json-rpc-types" }
 haneul-keys = { path = "crates/haneul-keys" }
-haneul-kvstore = { path = "crates/haneul-kvstore" }
 haneul-kv-rpc = { path = "crates/haneul-kv-rpc" }
+haneul-kvstore = { path = "crates/haneul-kvstore" }
 haneul-light-client = { path = "crates/haneul-light-client" }
 haneul-macros = { path = "crates/haneul-macros" }
 haneul-metric-checker = { path = "crates/haneul-metric-checker" }
@@ -734,8 +727,8 @@ haneul-network = { path = "crates/haneul-network" }
 haneul-node = { path = "crates/haneul-node" }
 haneul-open-rpc = { path = "crates/haneul-open-rpc" }
 haneul-open-rpc-macros = { path = "crates/haneul-open-rpc-macros" }
-haneul-package-dump = { path = "crates/haneul-package-dump" }
 haneul-package-alt = { path = "crates/haneul-package-alt" }
+haneul-package-dump = { path = "crates/haneul-package-dump" }
 haneul-package-management = { path = "crates/haneul-package-management" }
 haneul-package-resolver = { path = "crates/haneul-package-resolver" }
 haneul-pg-db = { path = "crates/haneul-pg-db" }
@@ -746,7 +739,9 @@ haneul-proxy = { path = "crates/haneul-proxy" }
 haneul-replay = { path = "crates/haneul-replay" }
 haneul-replay-2 = { path = "crates/haneul-replay-2" }
 haneul-rosetta = { path = "crates/haneul-rosetta" }
+haneul-rpc-api = { path = "crates/haneul-rpc-api" }
 haneul-rpc-loadgen = { path = "crates/haneul-rpc-loadgen" }
+haneul-rpc-resolver = { path = "crates/haneul-rpc-resolver" }
 haneul-sdk = { path = "crates/haneul-sdk" }
 haneul-simulator = { path = "crates/haneul-simulator" }
 haneul-snapshot = { path = "crates/haneul-snapshot" }
@@ -761,8 +756,6 @@ haneul-telemetry = { path = "crates/haneul-telemetry" }
 haneul-test-transaction-builder = { path = "crates/haneul-test-transaction-builder" }
 haneul-test-validator = { path = "crates/haneul-test-validator" }
 haneul-tls = { path = "crates/haneul-tls" }
-haneul-rpc-api = { path = "crates/haneul-rpc-api" }
-haneul-rpc-resolver = { path = "crates/haneul-rpc-resolver" }
 haneul-tool = { path = "crates/haneul-tool" }
 haneul-transaction-builder = { path = "crates/haneul-transaction-builder" }
 haneul-transaction-checks = { path = "crates/haneul-transaction-checks" }
@@ -770,6 +763,13 @@ haneul-transactional-test-runner = { path = "crates/haneul-transactional-test-ru
 haneul-types = { path = "crates/haneul-types" }
 haneul-upgrade-compatibility-transactional-tests = { path = "crates/haneul-upgrade-compatibility-transactional-tests" }
 haneul-verifier-transactional-tests = { path = "crates/haneul-verifier-transactional-tests" }
+haneullabs-common = { path = "crates/haneullabs-common" }
+haneullabs-metrics = { path = "crates/haneullabs-metrics" }
+haneullabs-network = { path = "crates/haneullabs-network" }
+haneullabs-service = { path = "crates/haneullabs-service" }
+prometheus-closure-metric = { path = "crates/prometheus-closure-metric" }
+shared-crypto = { path = "crates/shared-crypto" }
+simulacrum = { path = "crates/simulacrum" }
 telemetry-subscribers = { path = "crates/telemetry-subscribers" }
 test-cluster = { path = "crates/test-cluster" }
 transaction-fuzzer = { path = "crates/transaction-fuzzer" }
@@ -779,8 +779,8 @@ x = { path = "crates/x" }
 
 consensus-config = { path = "consensus/config" }
 consensus-core = { path = "consensus/core" }
-consensus-types = { path = "consensus/types" }
 consensus-simtests = { path = "consensus/simtests" }
+consensus-types = { path = "consensus/types" }
 
 haneul-execution = { path = "haneul-execution" }
 # haneul-move-natives = { path = "haneul-execution/latest/haneul-move-natives", package = "haneul-move-natives-latest" }
